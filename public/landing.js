@@ -3,11 +3,15 @@
   "use strict";
 
   /* =====================================================
-     CONFIG — the 5MinQuote worker's lead-capture endpoint.
-     Every submit on this shared landing page (any lead source —
-     Website, NextDoor, Google, Facebook/IG, TikTok...) posts here.
+     CONFIG — the 5MinQuote worker's API base. Every visit to this
+     shared landing page (any lead source — Website, NextDoor,
+     Google, Facebook/IG, TikTok...) talks to the same worker.
   ===================================================== */
-  var HIGHLEVEL_WEBHOOK = "https://guttermaxx-5minquote-worker.vercel.app/api/lead-capture";
+  var WORKER_BASE = "https://guttermaxx-5minquote-worker.vercel.app";
+  var LEAD_CAPTURE_URL   = WORKER_BASE + "/api/lead-capture";
+  var ADDRESS_LOOKUP_URL = WORKER_BASE + "/api/address-lookup";
+  var OTP_SEND_URL       = WORKER_BASE + "/api/otp-send";
+  var OTP_VERIFY_URL     = WORKER_BASE + "/api/otp-verify";
 
   var $  = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
@@ -68,7 +72,7 @@
   });
 
   // brand assets: hide quietly if the logo file hasn't been copied in yet
-  $$(".brand-logo, .watermark, .form-logo, .success-logo").forEach(function (img) {
+  $$(".brand-logo, .watermark, .form-logo").forEach(function (img) {
     img.addEventListener("error", function () { img.style.display = "none"; });
   });
 
@@ -294,14 +298,19 @@
 
   /* =====================================================
      ASSESSMENT FORM
+     One shared form feeds all three right-hand choices. The three
+     CTA clicks ARE the submit actions — there is no separate
+     "submit the form" step before choosing a path.
   ===================================================== */
   var form = $("#assessmentForm");
   var formContainer = $("#formContainer");
-  var successMessage = $("#successMessage");
-  var submitBtn = $("#submitBtn");
+  var quoteTransition = $("#quoteTransition");
   var phone = $("#phone");
   var zip = $("#zip");
-  var leadData = null;
+  var consent = $("#consent");
+  var formStatus = $("#formStatus");
+  var leadData = null;       // last validated snapshot of the shared form
+  var pendingRequest = null; // { request_id, territory, zip } from address-lookup, used by OTP flow
 
   phone.addEventListener("input", function () {
     var d = phone.value.replace(/\D/g, "").slice(0, 10);
@@ -331,17 +340,25 @@
     return true;
   }
 
-  var fields = ["first_name", "last_name", "phone", "email", "address", "city", "zip"].map(function (id) { return $("#" + id); });
+  var fields = ["first_name", "last_name", "phone", "email", "address", "zip"].map(function (id) { return $("#" + id); });
   fields.forEach(function (f) {
     f.addEventListener("blur", function () { showError(f, !isValid(f)); });
     f.addEventListener("input", function () { if (f.classList.contains("invalid") && isValid(f)) showError(f, false); });
     f.addEventListener("change", function () { if (isValid(f)) showError(f, false); });
   });
 
-  form.addEventListener("submit", function (event) {
-    event.preventDefault();
+  var consentWrap = consent.closest(".consent-check");
+  consent.addEventListener("change", function () {
+    if (consent.checked) {
+      consentWrap.classList.remove("invalid");
+      $('.error[data-for="consent"]').classList.remove("show");
+    }
+  });
 
-    if ($("#company").value) return;               // spam trap
+  // Validates every field + consent. Returns a plain data object on success,
+  // or null (and focuses/highlights the first problem) on failure.
+  function validateLeftForm() {
+    if ($("#company").value) return null; // spam trap — fail silently, no error shown
 
     var firstBad = null;
     fields.forEach(function (f) {
@@ -349,42 +366,202 @@
       showError(f, !ok);
       if (!ok && !firstBad) firstBad = f;
     });
-    if (firstBad) { firstBad.focus(); return; }
 
-    var original = submitBtn.innerHTML;
-    submitBtn.disabled = true;
-    submitBtn.innerHTML = '<span class="spinner" aria-hidden="true"></span> Sending...';
+    var consentOk = consent.checked;
+    consentWrap.classList.toggle("invalid", !consentOk);
+    $('.error[data-for="consent"]').classList.toggle("show", !consentOk);
+    if (!consentOk && !firstBad) firstBad = consent;
 
-    var data = Object.fromEntries(new FormData(form).entries());
-    data.source = "GutterMaxx website";
-    data.lead_source = LEAD_SOURCE;
-    data.submitted_at = new Date().toISOString();
-    data.territory = territoryFor(data.zip) || FALLBACK_TERRITORY;
-    leadData = data;
+    if (firstBad) { firstBad.focus(); return null; }
 
-    var request = HIGHLEVEL_WEBHOOK
-      ? fetch(HIGHLEVEL_WEBHOOK, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(data)
-        })
-      : Promise.resolve();
+    return {
+      first_name: $("#first_name").value.trim(),
+      last_name:  $("#last_name").value.trim(),
+      phone:      phone.value.trim(),
+      email:      $("#email").value.trim(),
+      address:    $("#address").value.trim(),
+      zip:        zip.value.trim(),
+      color_preference: $("#colorPreference").value || ""
+    };
+  }
 
-    request.then(function () {
-      formContainer.style.display = "none";
-      successMessage.style.display = "block";
-      successMessage.scrollIntoView({ block: "center" });
-      var cta = $("#mobileCta");
-      if (cta) { cta.classList.remove("show"); cta.dataset.done = "true"; }
+  function toE164(phoneDisplay) {
+    return "+1" + phoneDisplay.replace(/\D/g, "");
+  }
+
+  function setStatus(msg, isErr) {
+    formStatus.textContent = msg || "";
+    formStatus.classList.toggle("is-error", Boolean(isErr));
+  }
+
+  function setBtnLoading(btn, loading, label) {
+    if (loading) {
+      if (!btn.dataset.originalHtml) btn.dataset.originalHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner" aria-hidden="true"></span> ' + (label || "Please wait\u2026");
+    } else {
+      btn.disabled = false;
+      if (btn.dataset.originalHtml) btn.innerHTML = btn.dataset.originalHtml;
+    }
+  }
+
+  function showCtaError(id, message) {
+    var el = $("#" + id);
+    if (!el) return;
+    if (message) { el.textContent = message; el.classList.add("show"); }
+    else { el.textContent = ""; el.classList.remove("show"); }
+  }
+
+  // Best-effort — a CRM/DB hiccup on our side should never block the visitor.
+  function submitLead(payload) {
+    return fetch(LEAD_CAPTURE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+  }
+
+  function showQuoteTransition() {
+    formContainer.classList.add("hide");
+    quoteTransition.classList.add("show");
+    $("#transitionName").textContent = (leadData && leadData.first_name) ? ", " + leadData.first_name : "";
+    $("#transitionAddress").textContent = (leadData && leadData.address) ? " for " + leadData.address : "";
+    quoteTransition.scrollIntoView({ block: "center" });
+    var cta = $("#mobileCta");
+    if (cta) { cta.classList.remove("show"); cta.dataset.done = "true"; }
+  }
+
+
+  /* ---------- device fingerprint (FingerprintJS, with a light fallback) ---------- */
+  function fallbackFingerprint() {
+    try {
+      var raw = [
+        navigator.userAgent, navigator.language,
+        screen.width, screen.height, screen.colorDepth,
+        new Date().getTimezoneOffset()
+      ].join("|");
+      var hash = 0;
+      for (var i = 0; i < raw.length; i++) { hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0; }
+      return "fallback-" + Math.abs(hash).toString(36);
+    } catch (e) {
+      return "fallback-unknown";
+    }
+  }
+
+  function getDeviceFingerprint() {
+    return new Promise(function (resolve) {
+      var tries = 0;
+      (function attempt() {
+        if (window.FingerprintJS) {
+          window.FingerprintJS.load()
+            .then(function (fp) { return fp.get(); })
+            .then(function (result) { resolve(result.visitorId); })
+            .catch(function () { resolve(fallbackFingerprint()); });
+        } else if (tries++ < 20) {
+          setTimeout(attempt, 100);
+        } else {
+          resolve(fallbackFingerprint());
+        }
+      })();
+    });
+  }
+
+
+  /* ---------- GET ESTIMATE: validate -> address-lookup -> otp-send -> OTP modal ---------- */
+  form.addEventListener("submit", function (event) {
+    event.preventDefault();
+
+    var data = validateLeftForm();
+    if (!data) return;
+
+    showCtaError("ctaEstimateError", "");
+    var btn = $("#ctaEstimate");
+    setBtnLoading(btn, true, "Checking address\u2026");
+
+    var fullAddress = data.address + ", " + data.zip;
+
+    getDeviceFingerprint().then(function (fingerprint) {
+      return fetch(ADDRESS_LOOKUP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: fullAddress, device_fingerprint: fingerprint })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    }).then(function (result) {
+      if (!result.ok || result.body.in_service_area === false) {
+        var outOfArea = result.status === 422 || result.body.in_service_area === false;
+        var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.body.error || "ADDRESS_LOOKUP_FAILED"));
+        throw err;
+      }
+
+      var lookup = result.body;
+      pendingRequest = { request_id: lookup.request_id, territory: lookup.territory, zip: lookup.zip || data.zip };
+      leadData = Object.assign({}, data, {
+        territory: lookup.territory || territoryFor(data.zip) || FALLBACK_TERRITORY,
+        source: "GutterMaxx website",
+        lead_source: LEAD_SOURCE,
+        submitted_at: new Date().toISOString()
+      });
+
+      return fetch(OTP_SEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone) })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    }).then(function (result) {
+      if (!result.ok || !result.body.sent) {
+        throw new Error((result.body && result.body.error) || "OTP_SEND_FAILED");
+      }
+      setBtnLoading(btn, false);
+      openOtpModal();
     }).catch(function (err) {
+      setBtnLoading(btn, false);
       console.error(err);
-      submitBtn.disabled = false;
-      submitBtn.innerHTML = original;
-      var note = $(".privacy");
-      note.textContent = "That didn't go through. Check your connection and try again.";
-      note.style.color = "#b4453f";
+      if (err && err.message === "OUT_OF_AREA") {
+        showCtaError("ctaEstimateError", "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.");
+      } else {
+        showCtaError("ctaEstimateError", "That didn\u2019t go through. Check your connection and try again.");
+      }
     });
   });
+
+
+  /* ---------- 15-min Zoom / In-Home Demo: validate -> lead-capture -> booking modal ---------- */
+  function bindBookingCta(buttonId, errorId, step) {
+    var btn = $("#" + buttonId);
+    if (!btn) return;
+    btn.addEventListener("click", function () {
+      var data = validateLeftForm();
+      if (!data) return;
+
+      showCtaError(errorId, "");
+      var territory = territoryFor(data.zip) || FALLBACK_TERRITORY;
+      leadData = Object.assign({}, data, {
+        territory: territory,
+        source: "GutterMaxx website",
+        lead_source: LEAD_SOURCE,
+        submitted_at: new Date().toISOString()
+      });
+
+      setBtnLoading(btn, true, "One moment\u2026");
+      submitLead(Object.assign({}, leadData, {
+        next_step: step,
+        next_step_chosen_at: new Date().toISOString()
+      })).catch(function (err) {
+        console.error(err); // best-effort — still let them book below
+      }).then(function () {
+        setBtnLoading(btn, false);
+        openBooking(step);
+      });
+    });
+  }
 
 
   /* =====================================================
@@ -492,45 +669,134 @@
 
 
   /* =====================================================
-     NEXT STEP AFTER SUBMISSION
+     OTP VERIFICATION MODAL
+     Opened right after address-lookup + otp-send succeed for the
+     GET ESTIMATE flow. On a verified code: capture the lead, then
+     move into the (temporary) quote transition state.
   ===================================================== */
-  var STEP_REPLIES = {
-    "quote-5-min":    "Perfect - we'll call you within 5 minutes during business hours with your quote.",
-    "in-home-demo":   "Pick a time that suits you in the booking window.",
-    "virtual-15-min": "Pick a time that suits you in the booking window."
-  };
+  var otpModal = $("#otpModal");
+  var otpCode = $("#otpCode");
+  var otpVerifyBtn = $("#otpVerifyBtn");
+  var otpResend = $("#otpResend");
+  var otpPhoneDisplay = $("#otpPhoneDisplay");
+  var otpLastFocus = null;
 
-  var stepOptions = $$(".step-option");
-  var stepsConfirm = $("#stepsConfirm");
-  var stepsConfirmText = $("#stepsConfirmText");
+  function showOtpError(msg) {
+    var el = $("#otpError");
+    if (msg) { el.textContent = msg; el.classList.add("show"); }
+    else { el.textContent = ""; el.classList.remove("show"); }
+  }
 
-  stepOptions.forEach(function (opt) {
-    opt.addEventListener("click", function () {
-      var step = opt.dataset.step;
+  function openOtpModal() {
+    otpCode.value = "";
+    showOtpError("");
+    otpPhoneDisplay.textContent = (leadData && leadData.phone) || "your phone";
+    otpLastFocus = document.activeElement;
+    otpModal.classList.add("open");
+    document.body.style.overflow = "hidden";
+    setTimeout(function () { otpCode.focus(); }, 50);
+  }
 
-      stepOptions.forEach(function (o) {
-        o.setAttribute("aria-pressed", String(o === opt));
+  function closeOtpModal() {
+    if (!otpModal.classList.contains("open")) return;
+    otpModal.classList.remove("open");
+    document.body.style.overflow = "";
+    if (otpLastFocus) otpLastFocus.focus();
+  }
+
+  otpCode.addEventListener("input", function () {
+    otpCode.value = otpCode.value.replace(/\D/g, "").slice(0, 6);
+  });
+  otpCode.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); otpVerifyBtn.click(); }
+  });
+
+  $("#otpClose").addEventListener("click", closeOtpModal);
+  $$("[data-otp-close]", otpModal).forEach(function (el) {
+    el.addEventListener("click", closeOtpModal);
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeOtpModal();
+  });
+
+  otpVerifyBtn.addEventListener("click", function () {
+    var code = otpCode.value.trim();
+    if (!/^\d{6}$/.test(code)) {
+      showOtpError("Enter the 6-digit code we texted you.");
+      otpCode.focus();
+      return;
+    }
+    if (!pendingRequest) {
+      showOtpError("Something went wrong. Please close this and try again.");
+      return;
+    }
+
+    showOtpError("");
+    setBtnLoading(otpVerifyBtn, true, "Verifying\u2026");
+
+    fetch(OTP_VERIFY_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        request_id: pendingRequest.request_id,
+        phone_e164: toE164(leadData.phone),
+        code: code
+      })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
       });
-
-      stepsConfirmText.textContent = STEP_REPLIES[step] || "Thanks - we'll be in touch shortly.";
-      stepsConfirm.classList.add("show");
-
-      if (BOOKINGS.dfw[step]) openBooking(step);
-
-      if (HIGHLEVEL_WEBHOOK) {
-        var payload = Object.assign({}, leadData || {}, {
-          lead_source: (leadData && leadData.lead_source) || LEAD_SOURCE,
-          next_step: step,
-          next_step_chosen_at: new Date().toISOString()
-        });
-        fetch(HIGHLEVEL_WEBHOOK, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload)
-        }).catch(function (err) { console.error(err); });
+    }).then(function (result) {
+      setBtnLoading(otpVerifyBtn, false);
+      if (!result.ok || !result.body.verified) {
+        showOtpError("That code didn't match. Check it and try again, or resend.");
+        otpCode.focus();
+        return;
       }
+      closeOtpModal();
+      submitLead(Object.assign({}, leadData, {
+        next_step: "quote-5-min",
+        next_step_chosen_at: new Date().toISOString()
+      })).catch(function (err) { console.error(err); });
+      showQuoteTransition();
+    }).catch(function (err) {
+      console.error(err);
+      setBtnLoading(otpVerifyBtn, false);
+      showOtpError("That didn't go through. Check your connection and try again.");
     });
   });
+
+  otpResend.addEventListener("click", function () {
+    if (!pendingRequest || !leadData) return;
+    otpResend.disabled = true;
+    var original = otpResend.textContent;
+    otpResend.textContent = "Sending\u2026";
+
+    fetch(OTP_SEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone) })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    }).then(function (result) {
+      otpResend.disabled = false;
+      otpResend.textContent = original;
+      showOtpError(result.ok && result.body.sent ? "" : "Couldn't resend. Try again in a moment.");
+    }).catch(function () {
+      otpResend.disabled = false;
+      otpResend.textContent = original;
+      showOtpError("Couldn't resend. Try again in a moment.");
+    });
+  });
+
+
+  /* =====================================================
+     WIRE THE 15-MIN ZOOM / IN-HOME DEMO CTAs
+  ===================================================== */
+  bindBookingCta("ctaZoom", "ctaZoomError", "virtual-15-min");
+  bindBookingCta("ctaDemo", "ctaDemoError", "in-home-demo");
 
 
   /* =====================================================
