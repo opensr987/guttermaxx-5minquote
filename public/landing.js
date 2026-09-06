@@ -195,41 +195,10 @@
 
   /* =====================================================
      COLOR STUDIO
+     (Removed for launch — will be reintroduced later. The
+     hidden #colorPreference input still exists in the form
+     markup and simply stays empty until this section returns.)
   ===================================================== */
-  var COLORS = [
-    ["White", "#ffffff"], ["Eggshell", "#eee7d8"], ["Antique Ivory", "#eee4ca"], ["Almond", "#dfd1a9"],
-    ["Linen", "#d6c8ae"], ["Wicker", "#b9a27d"], ["Pearl Gray", "#a5a7a4"], ["Dove Gray", "#9b9e9b"],
-    ["Tuxedo Gray", "#808180"], ["Terratone", "#735e49"], ["Cocoa Brown", "#624835"], ["Royal Brown", "#593725"],
-    ["Musket Brown", "#503a2d"], ["Dark Bronze", "#3d332e"], ["Forest Green", "#385c42"], ["Traditional Blue", "#293f61"],
-    ["Red", "#8e2725"], ["Clay", "#a77a52"], ["Cream", "#f0e0c4"], ["Black", "#151716"]
-  ];
-
-  var grid = $("#colorGrid");
-  var readoutName = $("#readoutName");
-  var readoutSwatch = $("#readoutSwatch");
-  var colorPreference = $("#colorPreference");
-
-  COLORS.forEach(function (c, i) {
-    var btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "color-option reveal";
-    btn.style.setProperty("--d", (i % 5) * 50 + "ms");
-    btn.setAttribute("aria-pressed", "false");
-    btn.innerHTML = '<span class="swatch" style="background:' + c[1] + '"></span><span>' + c[0] + "</span>";
-    btn.addEventListener("click", function () {
-      $$(".color-option", grid).forEach(function (b) { b.setAttribute("aria-pressed", "false"); });
-      btn.setAttribute("aria-pressed", "true");
-      readoutName.textContent = c[0];
-      readoutSwatch.style.background = c[1];
-      colorPreference.value = c[0];
-    });
-    grid.appendChild(btn);
-    if (revealItems.length && "IntersectionObserver" in window && !reduceMotion) {
-      revealObserver.observe(btn);
-    } else {
-      btn.classList.add("show");
-    }
-  });
 
 
   /* =====================================================
