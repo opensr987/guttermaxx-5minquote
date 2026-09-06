@@ -819,39 +819,39 @@
 
           <div class="form-row">
             <div>
-              <label for="first_name">First name</label>
-              <input type="text" id="first_name" name="first_name" placeholder="First name" autocomplete="given-name" required>
+              <label for="first_name">First name <span class="req-mark" aria-hidden="true">*</span></label>
+              <input type="text" id="first_name" name="first_name" placeholder="First name" autocomplete="given-name" required aria-required="true">
               <p class="error" data-for="first_name">Enter your first name.</p>
             </div>
             <div>
-              <label for="last_name">Last name</label>
-              <input type="text" id="last_name" name="last_name" placeholder="Last name" autocomplete="family-name" required>
+              <label for="last_name">Last name <span class="req-mark" aria-hidden="true">*</span></label>
+              <input type="text" id="last_name" name="last_name" placeholder="Last name" autocomplete="family-name" required aria-required="true">
               <p class="error" data-for="last_name">Enter your last name.</p>
             </div>
           </div>
 
           <div class="form-field">
-            <label for="phone">Phone</label>
-            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000" autocomplete="tel" inputmode="tel" required>
+            <label for="phone">Phone <span class="req-mark" aria-hidden="true">*</span></label>
+            <input type="tel" id="phone" name="phone" placeholder="+1 (555) 000-0000" autocomplete="tel" inputmode="tel" required aria-required="true">
             <p class="error" data-for="phone">Enter a 10-digit phone number.</p>
           </div>
 
           <div class="form-field">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required>
+            <label for="email">Email <span class="req-mark" aria-hidden="true">*</span></label>
+            <input type="email" id="email" name="email" placeholder="you@example.com" autocomplete="email" required aria-required="true">
             <p class="error" data-for="email">Enter a valid email address.</p>
           </div>
 
           <div class="form-field">
-            <label for="address">Street address</label>
-            <input type="text" id="address" name="address" placeholder="Enter your full address" autocomplete="street-address" required>
+            <label for="address">Street address <span class="req-mark" aria-hidden="true">*</span></label>
+            <input type="text" id="address" name="address" placeholder="Enter your full address" autocomplete="street-address" required aria-required="true">
             <p class="error" data-for="address">Enter your full property address.</p>
           </div>
 
           <div class="form-field">
-            <label for="zip">ZIP code</label>
+            <label for="zip">ZIP code <span class="req-mark" aria-hidden="true">*</span></label>
             <input type="text" id="zip" name="zip" placeholder="Enter ZIP code" autocomplete="postal-code"
-                   inputmode="numeric" maxlength="5" required>
+                   inputmode="numeric" maxlength="5" required aria-required="true">
             <p class="error" data-for="zip">Enter your 5-digit ZIP code.</p>
           </div>
 
