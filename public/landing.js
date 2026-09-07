@@ -12,6 +12,8 @@
   var ADDRESS_LOOKUP_URL = WORKER_BASE + "/api/address-lookup";
   var OTP_SEND_URL       = WORKER_BASE + "/api/otp-send";
   var OTP_VERIFY_URL     = WORKER_BASE + "/api/otp-verify";
+  var QUOTE_START_URL    = WORKER_BASE + "/api/quote-start";
+  var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
 
   // Cloudflare Turnstile — invisible bot check. Site key is public by
   // design (safe to ship in client code); the paired secret key lives only
@@ -315,7 +317,8 @@
   var consent = $("#consent");
   var formStatus = $("#formStatus");
   var leadData = null;       // last validated snapshot of the shared form
-  var pendingRequest = null; // { request_id, territory, zip } from address-lookup, used by OTP flow
+  var pendingRequest = null; // { request_id, territory, zip, address_key, formatted_address, lat, lng } from address-lookup, carried into quote-start
+  var attomRetry = null;     // Gate 7 (ATTOM_NOT_FOUND) state: { request_id, submission_id, attempt, max_attempts, final, phone_display, phone_digits }, set once quote-start reports a not-found property
 
   phone.addEventListener("input", function () {
     var d = phone.value.replace(/\D/g, "").slice(0, 10);
@@ -438,6 +441,100 @@
     if (cta) { cta.classList.remove("show"); cta.dataset.done = "true"; }
   }
 
+  /* ---------- Gate 7: ATTOM_NOT_FOUND retry panel ---------- */
+  // Replaces the 3 CTA cards in place with a message + "Update & try again"
+  // (non-final attempts) or a terminal message with no retry offered (the
+  // 3rd/final attempt) — the Manual Review button and local-number Call
+  // link are shown on every attempt's failure panel per the user's Sept 6
+  // instruction, not just the last one.
+  function showAttomRetryPanel() {
+    if (!attomRetry) return;
+
+    $$(".cta-stack > .cta-card").forEach(function (card) {
+      if (card.id !== "attomRetryPanel") card.hidden = true;
+    });
+    var panel = $("#attomRetryPanel");
+    panel.hidden = false;
+
+    var retrySubmit = $("#attomRetrySubmit");
+    if (attomRetry.final) {
+      $("#attomRetryHeadline").textContent = "We Can\u2019t Verify This Property\u2019s Information";
+      $("#attomRetryMessage").textContent = "We\u2019re still not finding a property that matches the information you entered. Please request a manual review, or call us directly and we\u2019ll help you get an accurate estimate.";
+      retrySubmit.hidden = true;
+      formContainer.classList.add("hide"); // no more retries — only the 2 buttons remain
+    } else {
+      $("#attomRetryHeadline").textContent = "We Need to Verify a Few Property Details";
+      $("#attomRetryMessage").textContent = "Please retry entering your information in case the information was invalid. We are not finding a property with the info you originally submitted.";
+      retrySubmit.hidden = false;
+      formContainer.classList.remove("hide"); // keep the form open/editable for correction
+    }
+
+    var phoneDigits = attomRetry.phone_digits || "";
+    $("#attomCallBtn").href = phoneDigits ? "tel:+1" + phoneDigits : "tel:";
+    $("#attomCallPhone").textContent = attomRetry.phone_display || "our local team";
+
+    showCtaError("attomRetryError", "");
+    panel.scrollIntoView({ block: "center" });
+  }
+
+  // Calls quote-start with everything collected so far (pendingRequest +
+  // leadData). Used both right after OTP verification (fresh attempt) and
+  // after a Gate-7 in-place address correction (retry attempt, OTP skipped).
+  // Resolves once the outcome (success transition, ATTOM_NOT_FOUND panel,
+  // or thrown error) has been handled.
+  function runQuoteStart() {
+    if (!pendingRequest || !leadData) return Promise.reject(new Error("MISSING_STATE"));
+
+    var payload = {
+      request_id: pendingRequest.request_id,
+      address_key: pendingRequest.address_key,
+      formatted_address: pendingRequest.formatted_address,
+      lat: pendingRequest.lat,
+      lng: pendingRequest.lng,
+      zip: pendingRequest.zip,
+      first_name: leadData.first_name,
+      last_name: leadData.last_name,
+      phone_e164: toE164(leadData.phone),
+      email: leadData.email,
+      lead_source: LEAD_SOURCE
+    };
+
+    return fetch(QUOTE_START_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    }).then(function (result) {
+      if (result.body && result.body.error === "ATTOM_NOT_FOUND") {
+        attomRetry = {
+          request_id: result.body.request_id || pendingRequest.request_id,
+          submission_id: result.body.submission_id,
+          attempt: result.body.attempt,
+          max_attempts: result.body.max_attempts || 3,
+          final: Boolean(result.body.final),
+          phone_display: result.body.phone_display,
+          phone_digits: result.body.phone_digits
+        };
+        showAttomRetryPanel();
+        return;
+      }
+
+      if (!result.ok) {
+        throw new Error((result.body && result.body.error) || "QUOTE_START_FAILED");
+      }
+
+      attomRetry = null;
+      submitLead(Object.assign({}, leadData, {
+        next_step: "quote-5-min",
+        next_step_chosen_at: new Date().toISOString()
+      })).catch(function (err) { console.error(err); });
+      showQuoteTransition();
+    });
+  }
+
 
   /* ---------- device fingerprint (FingerprintJS, with a light fallback) ---------- */
   function fallbackFingerprint() {
@@ -546,12 +643,82 @@
   }
 
 
+  // Gate 7 (ATTOM_NOT_FOUND) in-place retry: the customer corrects their
+  // address and resubmits without another OTP round trip. address-lookup
+  // updates the SAME quote_requests row (retry_of_request_id) so it never
+  // touches the 2-per-6-months rate limiter, then quote-start re-runs the
+  // ATTOM check directly — no otp-send/otp-verify in between.
+  function handleAttomRetrySubmit(data) {
+    var btn = $("#attomRetrySubmit");
+    showCtaError("attomRetryError", "");
+    setBtnLoading(btn, true, "Checking address\u2026");
+
+    var fullAddress = data.address + ", " + data.zip;
+
+    Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (results) {
+      return fetch(ADDRESS_LOOKUP_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          address: fullAddress,
+          device_fingerprint: results[0],
+          turnstile_token: results[1],
+          retry_of_request_id: attomRetry.request_id
+        })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    }).then(function (result) {
+      if (!result.ok || result.body.in_service_area === false) {
+        var outOfArea = result.status === 422 || result.body.in_service_area === false;
+        throw new Error(outOfArea ? "OUT_OF_AREA" : (result.body.error || "ADDRESS_LOOKUP_FAILED"));
+      }
+
+      var lookup = result.body;
+      pendingRequest = {
+        request_id: lookup.request_id,
+        territory: lookup.territory,
+        zip: lookup.zip || data.zip,
+        address_key: lookup.address_key,
+        formatted_address: lookup.formatted_address,
+        lat: lookup.lat,
+        lng: lookup.lng
+      };
+      leadData = Object.assign({}, data, {
+        territory: lookup.territory || territoryFor(data.zip) || FALLBACK_TERRITORY,
+        source: "GutterMaxx website",
+        lead_source: LEAD_SOURCE,
+        submitted_at: new Date().toISOString()
+      });
+
+      return runQuoteStart();
+    }).then(function () {
+      setBtnLoading(btn, false);
+    }).catch(function (err) {
+      setBtnLoading(btn, false);
+      console.error(err);
+      if (err && err.message === "OUT_OF_AREA") {
+        showCtaError("attomRetryError", "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.");
+      } else {
+        showCtaError("attomRetryError", "That didn\u2019t go through. Check your connection and try again.");
+      }
+    });
+  }
+
   /* ---------- GET ESTIMATE: validate -> address-lookup -> otp-send -> OTP modal ---------- */
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
     var data = validateLeftForm();
     if (!data) return;
+
+    // Already in an open Gate-7 retry (not yet final) — skip OTP entirely.
+    if (attomRetry && !attomRetry.final) {
+      handleAttomRetrySubmit(data);
+      return;
+    }
 
     showCtaError("ctaEstimateError", "");
     var btn = $("#ctaEstimate");
@@ -579,7 +746,15 @@
       }
 
       var lookup = result.body;
-      pendingRequest = { request_id: lookup.request_id, territory: lookup.territory, zip: lookup.zip || data.zip };
+      pendingRequest = {
+        request_id: lookup.request_id,
+        territory: lookup.territory,
+        zip: lookup.zip || data.zip,
+        address_key: lookup.address_key,
+        formatted_address: lookup.formatted_address,
+        lat: lookup.lat,
+        lng: lookup.lng
+      };
       leadData = Object.assign({}, data, {
         territory: lookup.territory || territoryFor(data.zip) || FALLBACK_TERRITORY,
         source: "GutterMaxx website",
@@ -830,18 +1005,20 @@
         return { ok: res.ok, body: body };
       });
     }).then(function (result) {
-      setBtnLoading(otpVerifyBtn, false);
       if (!result.ok || !result.body.verified) {
+        setBtnLoading(otpVerifyBtn, false);
         showOtpError("That code didn't match. Check it and try again, or resend.");
         otpCode.focus();
         return;
       }
-      closeOtpModal();
-      submitLead(Object.assign({}, leadData, {
-        next_step: "quote-5-min",
-        next_step_chosen_at: new Date().toISOString()
-      })).catch(function (err) { console.error(err); });
-      showQuoteTransition();
+      // Verified — hand off to quote-start, which runs the ATTOM gate
+      // (Gate 7). Keep the modal in a loading state until we know whether
+      // that succeeded or came back ATTOM_NOT_FOUND.
+      setBtnLoading(otpVerifyBtn, true, "Getting your estimate\u2026");
+      return runQuoteStart().then(function () {
+        setBtnLoading(otpVerifyBtn, false);
+        closeOtpModal();
+      });
     }).catch(function (err) {
       console.error(err);
       setBtnLoading(otpVerifyBtn, false);
@@ -882,6 +1059,54 @@
   ===================================================== */
   bindBookingCta("ctaZoom", "ctaZoomError", "virtual-15-min");
   bindBookingCta("ctaDemo", "ctaDemoError", "in-home-demo");
+
+
+  /* =====================================================
+     GATE 7 (ATTOM_NOT_FOUND) RETRY PANEL: Manual Review
+     button. The Call button (#attomCallBtn) is a plain tel:
+     anchor -- its href/text are set in showAttomRetryPanel(),
+     no click handler needed.
+  ===================================================== */
+  $("#attomManualReviewBtn").addEventListener("click", function () {
+    if (!attomRetry) return;
+    var btn = this;
+    showCtaError("attomRetryError", "");
+    setBtnLoading(btn, true, "Sending\u2026");
+
+    getTurnstileToken().then(function (turnstileToken) {
+      return fetch(MANUAL_REVIEW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          request_id: attomRetry.request_id,
+          submission_id: attomRetry.submission_id,
+          attempt: attomRetry.attempt,
+          first_name: leadData && leadData.first_name,
+          last_name: leadData && leadData.last_name,
+          phone: leadData && leadData.phone,
+          email: leadData && leadData.email,
+          address: leadData && leadData.address,
+          zip: leadData && leadData.zip,
+          territory: leadData && leadData.territory,
+          turnstile_token: turnstileToken
+        })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, body: body };
+      });
+    }).then(function (result) {
+      if (!result.ok || !result.body || !result.body.ok) {
+        throw new Error((result.body && result.body.error) || "MANUAL_REVIEW_FAILED");
+      }
+      btn.textContent = "Request sent \u2014 we\u2019ll follow up shortly";
+      btn.disabled = true;
+    }).catch(function (err) {
+      console.error(err);
+      setBtnLoading(btn, false);
+      showCtaError("attomRetryError", "That didn't go through. Try again, or call us directly.");
+    });
+  });
 
 
   /* =====================================================

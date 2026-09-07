@@ -923,6 +923,24 @@
         <p class="cta-error" id="ctaDemoError" role="alert"></p>
       </div>
 
+      <div class="cta-card cta-retry" id="attomRetryPanel" role="alert" hidden>
+        <div class="cta-kicker cta-kicker-warn">We need a bit more info</div>
+        <h3 id="attomRetryHeadline">We Need to Verify a Few Property Details</h3>
+        <p id="attomRetryMessage">Please retry entering your information in case the information was invalid. We are not finding a property with the info you originally submitted.</p>
+        <button type="submit" form="assessmentForm" class="cta-btn cta-btn-primary" id="attomRetrySubmit">
+          Update &amp; try again <span class="arw" aria-hidden="true">&rarr;</span>
+        </button>
+        <div class="cta-retry-actions">
+          <button type="button" class="cta-btn cta-btn-secondary" id="attomManualReviewBtn">
+            Request Manual Review <span class="arw" aria-hidden="true">&rarr;</span>
+          </button>
+          <a class="cta-btn cta-btn-secondary" id="attomCallBtn" href="tel:">
+            Call <span id="attomCallPhone"></span>
+          </a>
+        </div>
+        <p class="cta-error" id="attomRetryError" role="alert"></p>
+      </div>
+
     </div>
 
   </div>

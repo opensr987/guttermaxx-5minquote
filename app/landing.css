@@ -419,6 +419,25 @@ label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
 .cta-error{display:none;color:#b4453f;font-size:11.5px;font-weight:700;margin-top:10px}
 .cta-error.show{display:block}
 
+/* The native [hidden] attribute defaults to display:none in the UA
+   stylesheet, but .cta-btn (and other components) set an explicit
+   display value at equal specificity, which wins on source order and
+   silently un-hides elements toggled via el.hidden = true/false in JS
+   (e.g. #attomRetrySubmit). Force [hidden] to always win. */
+[hidden]{display:none!important}
+
+/* ATTOM_NOT_FOUND retry panel — replaces the 3 CTA cards in place; same
+   card aesthetic, amber kicker instead of green to flag "needs attention"
+   without an alarming red. Manual Review + Call stay available on every
+   attempt, per Gate_Logic_Next_Page_Strategy.docx. */
+.cta-retry{border-color:#e7c46b}
+.cta-kicker-warn{background:#fbf1d9;color:#8a6416}
+.cta-retry .cta-retry-actions{display:grid;gap:10px;margin-top:12px}
+.cta-retry .cta-btn{margin-top:0}
+.cta-retry #attomRetrySubmit{margin-top:16px}
+.cta-retry a.cta-btn{text-decoration:none}
+.cta-retry .cta-error{margin-top:12px}
+
 /* ---------- OTP MODAL ---------- */
 .otp-modal{position:fixed;inset:0;z-index:320;display:none}
 .otp-modal.open{display:block}
