@@ -35,6 +35,7 @@ export default function RootLayout({ children }) {
           rel="stylesheet"
         />
         <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" async></script>
+        <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
       </head>
       <body>{children}</body>
     </html>

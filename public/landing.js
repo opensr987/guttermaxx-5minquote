@@ -13,6 +13,11 @@
   var OTP_SEND_URL       = WORKER_BASE + "/api/otp-send";
   var OTP_VERIFY_URL     = WORKER_BASE + "/api/otp-verify";
 
+  // Cloudflare Turnstile — invisible bot check. Site key is public by
+  // design (safe to ship in client code); the paired secret key lives only
+  // in the worker's server-side environment and is never exposed here.
+  var TURNSTILE_SITE_KEY = "0x4AAAAAAEqqo6c6nQmUc4d-";
+
   var $  = function (s, c) { return (c || document).querySelector(s); };
   var $$ = function (s, c) { return Array.prototype.slice.call((c || document).querySelectorAll(s)); };
   var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -414,10 +419,12 @@
 
   // Best-effort — a CRM/DB hiccup on our side should never block the visitor.
   function submitLead(payload) {
-    return fetch(LEAD_CAPTURE_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
+    return getTurnstileToken().then(function (token) {
+      return fetch(LEAD_CAPTURE_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({}, payload, { turnstile_token: token }))
+      });
     });
   }
 
@@ -467,6 +474,78 @@
   }
 
 
+  /* ---------- Cloudflare Turnstile (invisible bot check) ---------- */
+  // Rendered once in explicit+execute mode: the widget stays inert until we
+  // call turnstile.execute(), which mints one fresh, single-use token per
+  // call — exactly what we need since each protected request (address
+  // lookup, OTP send, lead capture) must present its own token server-side.
+  var turnstileWidgetId = null;
+  var turnstilePending = null;
+
+  function ensureTurnstileWidget() {
+    if (turnstileWidgetId !== null || !window.turnstile || !$("#cf-turnstile")) return;
+    turnstileWidgetId = window.turnstile.render("#cf-turnstile", {
+      sitekey: TURNSTILE_SITE_KEY,
+      size: "invisible",
+      execution: "execute",
+      callback: function (token) {
+        if (turnstilePending) { turnstilePending.resolve(token); turnstilePending = null; }
+      },
+      "error-callback": function () {
+        if (turnstilePending) { turnstilePending.resolve(null); turnstilePending = null; }
+      },
+      "timeout-callback": function () {
+        if (turnstilePending) { turnstilePending.resolve(null); turnstilePending = null; }
+      }
+    });
+  }
+
+  // Resolves to a token string, or null if Turnstile never loaded/responded
+  // (e.g. blocked by an extension, slow network, or a stalled challenge).
+  // Callers send null through as-is — the worker treats a missing token as
+  // a hard block, by design. A hard 10s safety timeout guarantees this
+  // promise always settles, so a submit button can never hang forever
+  // waiting on a Cloudflare callback that fails to fire.
+  function getTurnstileToken() {
+    return new Promise(function (resolve) {
+      var settled = false;
+      var safety = setTimeout(function () {
+        if (settled) return;
+        settled = true;
+        turnstilePending = null;
+        resolve(null);
+      }, 10000);
+
+      function settle(token) {
+        if (settled) return;
+        settled = true;
+        clearTimeout(safety);
+        resolve(token);
+      }
+
+      var tries = 0;
+      (function wait() {
+        if (settled) return;
+        if (window.turnstile) {
+          ensureTurnstileWidget();
+          if (turnstileWidgetId === null) { settle(null); return; }
+          turnstilePending = { resolve: settle };
+          try {
+            window.turnstile.execute(turnstileWidgetId);
+          } catch (e) {
+            turnstilePending = null;
+            settle(null);
+          }
+        } else if (tries++ < 40) {
+          setTimeout(wait, 100);
+        } else {
+          settle(null);
+        }
+      })();
+    });
+  }
+
+
   /* ---------- GET ESTIMATE: validate -> address-lookup -> otp-send -> OTP modal ---------- */
   form.addEventListener("submit", function (event) {
     event.preventDefault();
@@ -480,11 +559,13 @@
 
     var fullAddress = data.address + ", " + data.zip;
 
-    getDeviceFingerprint().then(function (fingerprint) {
+    Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (results) {
+      var fingerprint = results[0];
+      var turnstileToken = results[1];
       return fetch(ADDRESS_LOOKUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: fullAddress, device_fingerprint: fingerprint })
+        body: JSON.stringify({ address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -506,10 +587,12 @@
         submitted_at: new Date().toISOString()
       });
 
-      return fetch(OTP_SEND_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone) })
+      return getTurnstileToken().then(function (turnstileToken) {
+        return fetch(OTP_SEND_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken })
+        });
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -772,10 +855,12 @@
     var original = otpResend.textContent;
     otpResend.textContent = "Sending\u2026";
 
-    fetch(OTP_SEND_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone) })
+    getTurnstileToken().then(function (turnstileToken) {
+      return fetch(OTP_SEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken })
+      });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
         return { ok: res.ok, body: body };
