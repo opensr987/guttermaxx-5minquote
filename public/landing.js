@@ -13,6 +13,7 @@
   var OTP_SEND_URL       = WORKER_BASE + "/api/otp-send";
   var OTP_VERIFY_URL     = WORKER_BASE + "/api/otp-verify";
   var QUOTE_START_URL    = WORKER_BASE + "/api/quote-start";
+  var QUOTE_STATUS_URL   = WORKER_BASE + "/api/quote-status";
   var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
 
   // Cloudflare Turnstile — invisible bot check. Site key is public by
@@ -319,6 +320,7 @@
   var leadData = null;       // last validated snapshot of the shared form
   var pendingRequest = null; // { request_id, territory, zip, address_key, formatted_address, lat, lng } from address-lookup, carried into quote-start
   var attomRetry = null;     // Gate 7 (ATTOM_NOT_FOUND) state: { request_id, submission_id, attempt, max_attempts, final, phone_display, phone_digits }, set once quote-start reports a not-found property
+  var activeTracker = null;  // this tab's live submissionTracker (see createSubmissionTracker below) — one per successful quote-start call, never shared or looked up by name/phone/address
 
   phone.addEventListener("input", function () {
     var d = phone.value.replace(/\D/g, "").slice(0, 10);
@@ -431,6 +433,96 @@
     });
   }
 
+  // ---------------------------------------------------------------------
+  // Submission tracker — the "sure fire connection" between this one
+  // browser tab and the ONE canopy/measurement commit that belongs to it.
+  //
+  // How correct assignment is guaranteed with multiple people hitting the
+  // site at the same time:
+  //   1. submission_id is minted server-side (never client-side, never
+  //      derived from name/phone/address — two "John Smith" submissions,
+  //      or the same person quoting twice, never collide on identity).
+  //   2. It's returned ONLY in this tab's own quote-start HTTP response.
+  //      No other open tab, and no other prospect's browser, ever sees it.
+  //      Each browser tab already has its own isolated JS state, so two
+  //      concurrent shoppers can never cross-read each other's tracker.
+  //   3. Every poll to quote-status is scoped by that exact id, and the
+  //      response is double-checked to echo the SAME id before this tab
+  //      accepts it (belt-and-suspenders — protects against a caching
+  //      proxy or a copy/paste bug ever mixing up two responses).
+  //   4. On the backend, submission_id is the database PRIMARY KEY behind
+  //      quote_submissions / canopy_packets / measurement_reports, so a
+  //      canopy commit can only ever attach to the one row it names —
+  //      never to a different prospect's row, even under heavy concurrent
+  //      traffic. See worker_repo/api/canopy-callback.js and
+  //      worker_repo/api/quote-start.js for the write-side half of this
+  //      guarantee.
+  //
+  // Usage (for the slide deck once built):
+  //   activeTracker = createSubmissionTracker(submissionId, function (s) {
+  //     // s.canopy_status: "pending" | "succeeded" | "failed"
+  //     // s.measurement_status: "pending" | "succeeded" | "failed"
+  //     // s.canopy / s.measurement: the row data once succeeded
+  //   });
+  //   activeTracker.start();   // begins polling
+  //   activeTracker.stop();    // call when the deck navigates away
+  // ---------------------------------------------------------------------
+  function createSubmissionTracker(submissionId, onUpdate) {
+    var POLL_MS = 3000;
+    var MAX_WAIT_MS = 120000; // stop polling after 2 minutes either way
+    var timer = null;
+    var startedAt = Date.now();
+    var stopped = false;
+    var lastStatus = null;
+
+    function pollOnce() {
+      if (stopped) return;
+      fetch(QUOTE_STATUS_URL + "?submission_id=" + encodeURIComponent(submissionId))
+        .then(function (res) { return res.json().catch(function () { return null; }); })
+        .then(function (body) {
+          if (stopped || !body) return;
+          // Never accept a response for a different submission_id than the
+          // one this tracker was built for — the assignment guarantee.
+          if (body.submission_id !== submissionId) {
+            console.error("[submissionTracker] id mismatch, ignoring response", body.submission_id, "!==", submissionId);
+            return;
+          }
+          lastStatus = body;
+          if (typeof onUpdate === "function") onUpdate(body);
+
+          var bothTerminal = body.canopy_status !== "pending" && body.measurement_status !== "pending";
+          if (bothTerminal || Date.now() - startedAt > MAX_WAIT_MS) {
+            stop();
+            return;
+          }
+          timer = setTimeout(pollOnce, POLL_MS);
+        })
+        .catch(function (err) {
+          console.error("[submissionTracker] poll failed:", err.message);
+          if (!stopped && Date.now() - startedAt <= MAX_WAIT_MS) {
+            timer = setTimeout(pollOnce, POLL_MS);
+          }
+        });
+    }
+
+    function start() {
+      if (timer || stopped) return;
+      pollOnce();
+    }
+
+    function stop() {
+      stopped = true;
+      if (timer) { clearTimeout(timer); timer = null; }
+    }
+
+    return {
+      submissionId: submissionId,
+      start: start,
+      stop: stop,
+      getLastStatus: function () { return lastStatus; },
+    };
+  }
+
   function showQuoteTransition() {
     formContainer.classList.add("hide");
     quoteTransition.classList.add("show");
@@ -531,6 +623,24 @@
         next_step: "quote-5-min",
         next_step_chosen_at: new Date().toISOString()
       })).catch(function (err) { console.error(err); });
+
+      // Cache hits and bypassed submissions never trigger a Vexcel job, so
+      // there's no canopy/measurement commit to ever wait on for those. Only
+      // start the tracker on the real "processing" path — this is exactly
+      // the moment this tab's own submission_id exists and a Vexcel job has
+      // just been triggered for it.
+      if (activeTracker) { activeTracker.stop(); }
+      if (result.body && result.body.submission_id && result.body.status === "processing") {
+        activeTracker = createSubmissionTracker(result.body.submission_id, function (status) {
+          // Placeholder hook — the slide deck (Slides 2-5, not yet built)
+          // reads canopy_status/measurement_status here to decide Path A
+          // vs Path B. Logged for now so real production polling can be
+          // verified end to end before the deck consumes it.
+          console.log("[submissionTracker] status update", status.submission_id, status.canopy_status, status.measurement_status);
+        });
+        activeTracker.start();
+      }
+
       showQuoteTransition();
     });
   }
