@@ -924,20 +924,6 @@ const BODY_HTML = `
 
       <div class="cta-stack">
 
-      <!-- ============================================================
-           5-MINUTE ESTIMATE CTA is TEMPORARILY HIDDEN (2026-09-09).
-           This is the FULL 3-CTA version's primary card. It is intact
-           here on purpose, not deleted. It depends on the slide-deck
-           flow (Gate logic, quote-start/canopy pipeline, GHL 5ME stage
-           sync) that is still being built.
-           TO RESTORE: delete the HTML comment markers that open just
-           above this line and close just below the closing div, and
-           remove the matching guard in public/landing.js marked
-           5-MIN ESTIMATE TEMP-DISABLE GUARD (search that phrase).
-           Full working copy of this state is also preserved at
-           /home/user/workspace/frontend_repo_3CTA_BACKUP_20260909
-           and git branch three-cta-full-2026-09-09.
-           ============================================================
       <div class="cta-card cta-primary">
         <div class="cta-kicker">Fastest option</div>
         <div class="cta-head">
@@ -951,7 +937,6 @@ const BODY_HTML = `
         <p class="cta-trust-chip"><b>4.9&#9733;</b> Rated &middot; Licensed &amp; Insured &middot; No obligation</p>
         <p class="cta-error" id="ctaEstimateError" role="alert"></p>
       </div>
-      -->
 
       <div class="cta-card">
         <div class="cta-head">
