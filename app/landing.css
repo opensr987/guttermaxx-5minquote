@@ -25,6 +25,9 @@
   --border:#dfe5df;
   --water:#5b9fb8;
   --star:#f2b544;
+  --action-red:#c1442d;    /* primary CTA accent — draws the eye against the green brand palette */
+  --action-red-dark:#9c341f;
+  --action-red-light:#fbe9e4;
   --shadow:0 25px 70px rgba(16,25,20,.12);
   --shadow-sm:0 10px 30px rgba(16,25,20,.07);
   --radius:24px;
@@ -159,6 +162,9 @@ footer .footer-grid{
   border-radius:50%;background:var(--border);transform:translateY(-50%);
 }
 .header-trust span:first-child::before{display:none}
+.header-trust .rating{color:var(--green-dark);font-weight:900}
+.header-trust .rating b{font-weight:900}
+.header-trust .rating i{color:var(--star);font-style:normal;margin:0 1px;letter-spacing:-1px}
 
 /* Whole page pinned to exactly one viewport — header + assessment fill it,
    every internal size below scales with vh so the fit holds at any screen
@@ -184,7 +190,14 @@ main#main{
   overflow:hidden;
 }
 footer{padding-top:0 !important;flex:0 0 auto !important}
-.footer-bottom{padding:clamp(10px,1.6vh,20px) 0 !important;margin-top:0 !important;border-top:0 !important}
+.footer-bottom{padding:clamp(8px,1.4vh,16px) 0 !important;margin-top:0 !important;border-top:0 !important}
+.footer-trustbar{gap:clamp(8px,1.8vw,22px) !important;font-size:clamp(9px,1.1vh,11.5px) !important}
+.ftb-rating{padding-right:clamp(7px,1.4vw,15px) !important;gap:clamp(4px,0.7vw,6px) !important}
+.ftb-stars{font-size:clamp(9.5px,1.2vh,12px) !important}
+.ftb-score{font-size:clamp(11.5px,1.6vh,15px) !important}
+.ftb-rcount{font-size:clamp(8px,1vh,10.5px) !important}
+.ftb-items{gap:clamp(7px,1.6vw,16px) !important}
+.ftb-copyright{padding-left:clamp(7px,1.4vw,15px) !important;font-size:clamp(8px,1vh,10.5px) !important}
 
 .assessment{
   padding:clamp(4px,1vh,20px) 0;
@@ -205,20 +218,34 @@ footer{padding-top:0 !important;flex:0 0 auto !important}
 .form-row{gap:clamp(8px,1.2vw,12px) !important}
 .form-field{margin-top:clamp(5px,1vh,12px) !important}
 label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5vh,6px) !important}
-.form-card input,.form-card select{height:clamp(32px,5.4vh,44px) !important;font-size:clamp(12px,1.4vh,14px) !important}
+.form-card input:not([type=checkbox]),.form-card select{height:clamp(32px,5.4vh,44px) !important;font-size:clamp(12px,1.4vh,14px) !important}
 .error{font-size:clamp(9.5px,1.1vh,11px) !important;margin-top:clamp(2px,0.4vh,4px) !important}
-.consent-check{margin-top:clamp(6px,1.3vh,16px) !important;padding:clamp(7px,1.2vh,13px) clamp(10px,1.4vw,15px) !important;gap:8px !important}
-.consent-check span{font-size:clamp(9px,1.05vh,11px) !important}
+.consent-group{margin-top:clamp(5px,1vh,12px) !important;padding:0 clamp(10px,1.4vw,15px) !important}
+.consent-row{padding:clamp(4px,0.8vh,9px) 0 !important;gap:8px !important}
+.consent-row span{font-size:clamp(9px,1.05vh,11px) !important}
 .form-status{margin-top:clamp(4px,1vh,12px) !important;min-height:12px !important}
 
+.right-col{gap:clamp(7px,1.5vh,16px) !important}
 .cta-stack{gap:clamp(7px,1.5vh,16px) !important}
 .cta-card{padding:clamp(9px,1.7vh,24px) !important}
 .cta-kicker{margin-bottom:clamp(3px,0.8vh,10px) !important;padding:clamp(2px,0.5vh,5px) clamp(7px,1vw,11px) !important;font-size:clamp(8px,0.9vh,9.5px) !important}
 .cta-card h3,.cta-primary h3{font-size:clamp(12.5px,1.8vh,18px) !important;margin-bottom:clamp(2px,0.5vh,6px) !important}
 .cta-card p{font-size:clamp(10px,1.2vh,13px) !important;line-height:1.35 !important}
 .cta-btn{height:clamp(32px,5.2vh,48px) !important;margin-top:clamp(6px,1vh,14px) !important;font-size:clamp(11.5px,1.3vh,14px) !important}
-.cta-btn-primary{height:clamp(34px,5.6vh,52px) !important;font-size:clamp(12px,1.4vh,15px) !important}
+.cta-btn-primary{height:clamp(34px,5.6vh,52px) !important;font-size:clamp(14px,1.9vh,19px) !important}
+.cta-trust-chip{font-size:clamp(8.5px,0.95vh,10.5px) !important;margin-top:clamp(3px,0.6vh,7px) !important}
 .cta-error{font-size:clamp(9.5px,1.1vh,11px) !important;margin-top:clamp(4px,0.8vh,10px) !important}
+
+/* Compare slider — desktop only (901px+), sized in vh so it shrinks with
+   everything else above this breakpoint and never forces a scrollbar. */
+@media(min-width:901px){
+  .mini-compare{display:block !important}
+  .mc-frame{height:clamp(64px,11vh,150px) !important}
+  .mc-caption{font-size:clamp(9px,1vh,11px) !important;margin-top:clamp(3px,0.6vh,6px) !important}
+}
+@media(max-width:900px){
+  .mini-compare{display:none !important}
+}
 
 /* Mobile: the assessment grid stacks to one column (form, then all 3 CTA
    cards below it) — far more total content than the desktop two-column
@@ -229,8 +256,13 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
    and shrink CTA-card copy floors further than the desktop minimums. */
 @media(max-width:900px){
   body{padding-bottom:0 !important}
-  .header-trust span:nth-child(2),.header-trust span:nth-child(3){display:none}
+  .header-trust span:nth-child(3),.header-trust span:nth-child(4){display:none}
   .header-trust{font-size:10.5px !important}
+  .footer-bottom{padding:clamp(4px,0.9vh,8px) 0 !important}
+  .ftb-items .ftb-item:nth-child(3),.ftb-items .ftb-item:nth-child(4){display:none}
+  .ftb-copyright{display:none}
+  .footer-trustbar{gap:8px !important}
+  .ftb-rating{border-right:0 !important;padding-right:0 !important}
   .form-row{grid-template-columns:1fr 1fr !important;gap:8px !important}
   .cta-card p{display:none !important}
   .cta-kicker{font-size:8px !important;padding:2px 6px !important;margin-bottom:3px !important}
@@ -238,11 +270,18 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .cta-card{padding:clamp(8px,1.8vh,16px) !important}
   .cta-stack{gap:clamp(6px,1.4vh,12px) !important}
   .cta-btn{height:clamp(30px,5.6vh,42px) !important;margin-top:clamp(4px,1vh,8px) !important}
-  .cta-btn-primary{height:clamp(32px,6vh,46px) !important}
-  .assessment-head{margin-bottom:clamp(4px,1.2vh,12px) !important}
-  .assessment-head h2{font-size:clamp(17px,3.6vh,26px) !important}
-  .assessment-head p{display:none !important}
+  .cta-btn-primary{height:clamp(32px,6vh,46px) !important;font-size:clamp(13.5px,2.6vh,17px) !important}
+  /* Both purely-decorative headings (section intro + form card subheading —
+     the form fields and CTA copy already state the purpose) are dropped on
+     EVERY mobile width, not gated to a single height breakpoint. A height-only
+     cutoff created a cliff: a phone 8px taller than the cutoff kept both full
+     headings with far less room to spare, overlapping the footer worse than
+     shorter phones that had them hidden. Dropping them unconditionally removes
+     that cliff and keeps the same safety margin across the whole height range. */
+  .assessment-head{display:none !important}
   .form-card{padding:clamp(10px,2vh,18px) !important}
+  .form-title h3{display:none !important}
+  .form-title>span{margin-bottom:2px !important}
   .form-title p{display:none !important}
   .form-logo{display:none !important}
   /* 3 stacked full cards + a 6-field form is taller than any phone
@@ -252,8 +291,8 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
      already states the action) so all 3 stay visible with no scroll. */
   .cta-stack{grid-template-columns:1fr 1fr !important}
   .cta-primary{grid-column:1/-1 !important}
-  .cta-card:not(.cta-primary) h3{display:none !important}
-  .cta-card:not(.cta-primary) .cta-btn{margin-top:0 !important;font-size:11px !important;padding:0 6px !important;white-space:normal !important;line-height:1.2 !important}
+  .cta-card:not(.cta-primary) .cta-head{display:none !important}
+  .cta-card:not(.cta-primary) .cta-btn{margin-top:0 !important;font-size:8.5px !important;padding:0 4px !important;white-space:normal !important;line-height:1.1 !important;height:clamp(28px,5vh,36px) !important;gap:2px !important}
   /* Further mobile-only floor trims — every field/row/gap shaved a bit
      tighter than the shared desktop floors above so the full form + all
      3 CTAs clear the shortest common phone heights with no scroll. */
@@ -263,21 +302,47 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .assessment-grid{gap:8px !important}
   .form-field{margin-top:clamp(3px,0.7vh,8px) !important}
   label{font-size:clamp(9.5px,1vh,11px) !important;margin-bottom:1px !important}
-  .form-card input,.form-card select{height:clamp(28px,4.6vh,38px) !important}
+  .form-card input:not([type=checkbox]),.form-card select{height:clamp(28px,4.6vh,38px) !important}
   .form-row{gap:6px !important}
-  .consent-check{margin-top:clamp(4px,0.9vh,10px) !important;padding:5px 8px !important}
+  .consent-group{margin-top:clamp(3px,0.7vh,7px) !important;padding:0 8px !important}
+  .consent-row{padding:4px 0 !important}
   .form-status{margin-top:2px !important;min-height:0 !important}
 }
 /* Shortest common phones (SE/8-size screens and smaller) still come up
-   short even at the floors above — drop the two purely decorative
-   headings (section intro + form card subheading; the form fields and
-   CTA copy already state the purpose) to close the remaining gap. */
+   short even at the floors above — both decorative headings are already
+   dropped on every mobile width now, so this tier only trims the last bit
+   of padding/spacing to close the remaining gap. */
 @media(max-width:900px) and (max-height:850px){
-  .assessment-head{display:none !important}
-  .form-title h3{display:none !important}
-  .form-title>span{margin-bottom:2px !important}
   .assessment{padding:0 !important}
   .form-card{padding:clamp(6px,1.4vh,14px) !important}
+  .ftb-rcount{display:none !important}
+  .footer-bottom{padding:3px 0 !important}
+}
+/* Ultra-short phones (iPhone SE/6/7/8, small Android, older 4-4.7in
+   devices — roughly 700px tall and under). One more layer of squeeze:
+   drop the trust bar down to a single line (rating + one stat) and shave
+   every remaining floor a bit further so the CTA row still clears the
+   footer with no scroll. */
+@media(max-width:900px) and (max-height:700px){
+  nav{height:clamp(32px,6vh,60px) !important}
+  header .brand-logo{height:clamp(15px,2.6vh,26px) !important}
+  .form-card{padding:clamp(4px,1.2vh,14px) !important}
+  .assessment-grid{gap:5px !important}
+  .form-field{margin-top:2px !important}
+  label{margin-bottom:0 !important}
+  .form-card input:not([type=checkbox]),.form-card select{height:clamp(24px,4.2vh,38px) !important}
+  .form-row{gap:5px !important}
+  .consent-group{margin-top:2px !important;padding:0 6px !important}
+  .consent-row{padding:2px 0 !important}
+  .cta-stack{gap:clamp(4px,1.2vh,12px) !important}
+  .cta-card{padding:clamp(5px,1.4vh,16px) !important}
+  .cta-kicker{margin-bottom:1px !important}
+  .cta-btn{height:clamp(24px,4.8vh,42px) !important;margin-top:2px !important}
+  .cta-btn-primary{height:clamp(26px,5vh,46px) !important}
+  .cta-trust-chip{display:none !important}
+  .footer-bottom{padding:2px 0 !important}
+  .ftb-items .ftb-item:nth-child(2){display:none !important}
+  .footer-trustbar{gap:6px !important}
 }
 
 /* ---------- 4. HERO ---------- */
@@ -509,7 +574,7 @@ section{padding:var(--section-y) 0}
 .form-field{margin-top:14px}
 label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
 .req-mark{color:#b4453f;margin-left:1px}
-.form-card input,.form-card select{
+.form-card input:not([type=checkbox]),.form-card select{
   width:100%;height:48px;border:1px solid #d7ded8;border-radius:12px;padding:0 13px;
   outline:none;background:#fff;color:var(--text);transition:border-color .2s var(--ease),box-shadow .2s var(--ease);
 }
@@ -527,14 +592,15 @@ label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
 .form-status{min-height:18px;color:var(--muted);font-size:12.5px;font-weight:700;margin-top:14px;text-align:left}
 .form-status.is-error{color:#b4453f}
 
-.consent-check{
-  display:flex;align-items:flex-start;gap:10px;margin-top:18px;padding:14px 15px;
-  background:var(--cream-2);border:1px solid var(--border);border-radius:14px;cursor:pointer;
+.consent-group{
+  margin-top:14px;padding:2px 15px;background:var(--cream-2);border:1px solid var(--border);border-radius:14px;
 }
-.consent-check input{width:17px;height:17px;flex:0 0 17px;margin-top:1px;accent-color:var(--green);cursor:pointer}
-.consent-check span{font-size:11.5px;line-height:1.5;color:#5f6a63}
-.consent-check span a{color:var(--green);font-weight:700;text-decoration:underline}
-.consent-check.invalid{border-color:#b4453f;box-shadow:0 0 0 3px rgba(180,69,63,.1)}
+.consent-row{display:flex;align-items:flex-start;gap:10px;padding:9px 0;cursor:pointer}
+.consent-row+.consent-row{border-top:1px solid var(--border)}
+.consent-row input{width:16px;height:16px;flex:0 0 16px;margin-top:1px;accent-color:var(--green);cursor:pointer}
+.consent-row span{font-size:11px;line-height:1.4;color:#5f6a63}
+.consent-row span a{color:var(--green);font-weight:700;text-decoration:underline}
+.consent-row.invalid{background:rgba(180,69,63,.07);margin:0 -15px;padding:9px 15px;border-radius:8px}
 
 .quote-transition{display:none;text-align:center;padding:34px 10px}
 .quote-transition.show{display:block}
@@ -546,32 +612,89 @@ label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
 .quote-transition p{color:var(--muted);margin-top:8px;font-size:14px;line-height:1.6}
 #formContainer.hide{display:none}
 
-/* Right-hand CTA stack */
+/* Right column: compare slider + CTA stack */
+.right-col{display:flex;flex-direction:column;gap:16px}
+
+/* Before/after compare slider. Two full-size images stacked exactly on top
+   of each other (position:absolute, object-fit:cover) — the "before" image
+   is revealed/hidden with clip-path so it can never drift out of alignment
+   with the "after" image underneath, regardless of drag position. */
+.mini-compare{display:none}
+.mc-frame{
+  position:relative;width:100%;border-radius:var(--radius-lg);overflow:hidden;
+  box-shadow:var(--shadow-sm);border:1px solid var(--border);background:var(--dark);
+}
+.mc-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;pointer-events:none}
+/* The frame's aspect ratio is much wider/shorter than either source photo,
+   so a plain center crop cuts into whichever part of the photo isn't
+   dead-center. The after photo's gutter/roofline sits in its upper third,
+   so bias the crop up to keep it in frame instead of showing mostly wall
+   and window below it. */
+.mc-after{object-position:50% 18%}
+.mc-tag{
+  position:absolute;top:8px;padding:3px 9px;border-radius:6px;font-size:10px;font-weight:900;
+  letter-spacing:.05em;color:#fff;background:rgba(13,47,33,.72);z-index:2;pointer-events:none;
+}
+.mc-tag-before{left:8px}
+.mc-tag-after{right:8px}
+.mc-divider{
+  position:absolute;top:0;bottom:0;left:50%;width:2px;transform:translateX(-1px);z-index:3;
+  background:#fff;box-shadow:0 0 0 1px rgba(0,0,0,.15);pointer-events:none;
+}
+.mc-caption{color:var(--muted);font-size:11.5px;text-align:center;margin-top:6px}
+.mc-caption b{color:var(--green-dark)}
+
+.cta-head{display:flex;align-items:flex-start;gap:12px}
+.cta-avatar{
+  width:clamp(30px,4.4vh,46px);height:clamp(30px,4.4vh,46px);flex:0 0 clamp(30px,4.4vh,46px);
+  border-radius:50%;object-fit:cover;border:2px solid var(--border);box-shadow:0 2px 6px rgba(0,0,0,.08);
+}
+.cta-primary .cta-avatar{border-color:var(--action-red-light)}
+
 .cta-stack{display:grid;gap:16px}
 .cta-card{
   background:#fff;border:1px solid var(--border);border-radius:var(--radius-lg);
   padding:clamp(20px,2.6vw,26px);box-shadow:var(--shadow-sm);
 }
 .cta-kicker{
-  display:inline-block;padding:5px 11px;margin-bottom:10px;background:var(--green-light);color:var(--green);
+  display:inline-block;padding:5px 11px;margin-bottom:10px;background:var(--action-red-light);color:var(--action-red);
   border-radius:999px;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;
 }
 .cta-card h3{font-size:18px;line-height:1.25;margin-bottom:6px}
 .cta-card p{color:var(--muted);font-size:13.5px;line-height:1.5}
-.cta-primary{border-color:var(--green);box-shadow:0 16px 32px rgba(13,47,33,.14)}
+.cta-primary{
+  border:2px solid var(--action-red);box-shadow:0 18px 34px rgba(156,52,31,.18),0 0 0 4px var(--action-red-light);
+  position:relative;
+}
 .cta-primary h3{font-size:20px}
+.cta-kicker{position:relative}
+.cta-primary .cta-kicker::before{
+  content:"";display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;
+  background:var(--action-red);vertical-align:1px;animation:cta-pulse 1.8s ease-out infinite;
+}
+@keyframes cta-pulse{
+  0%{box-shadow:0 0 0 0 rgba(193,68,45,.55)}
+  70%{box-shadow:0 0 0 6px rgba(193,68,45,0)}
+  100%{box-shadow:0 0 0 0 rgba(193,68,45,0)}
+}
+.cta-trust-chip{
+  display:flex;align-items:center;justify-content:center;gap:4px;text-align:center;
+  color:var(--muted);font-size:11px;font-weight:700;margin-top:10px;
+}
+.cta-trust-chip b{color:var(--star)}
 .cta-btn{
   width:100%;height:52px;margin-top:16px;border:0;border-radius:999px;font-weight:900;font-size:14.5px;
   cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;
   transition:background .25s var(--ease),transform .25s var(--ease),box-shadow .25s var(--ease),border-color .25s var(--ease);
 }
 .cta-btn:disabled{opacity:.7;cursor:progress}
-.cta-btn .arw{transition:transform .25s var(--ease)}
+.cta-btn-label{flex:1 1 auto;min-width:0}
+.cta-btn .arw{transition:transform .25s var(--ease);flex:0 0 auto}
 .cta-btn:hover:not(:disabled) .arw{transform:translateX(3px)}
-.cta-btn-primary{background:var(--green);color:#fff;height:56px;font-size:15.5px}
-.cta-btn-primary:hover:not(:disabled){background:var(--green-dark);transform:translateY(-2px);box-shadow:0 14px 28px rgba(13,47,33,.22)}
-.cta-btn-secondary{background:#fff;color:var(--green-dark);border:1.5px solid var(--border)}
-.cta-btn-secondary:hover:not(:disabled){border-color:var(--green);background:var(--green-light);transform:translateY(-2px)}
+.cta-btn-primary{background:var(--action-red);color:#fff;height:56px;font-size:18px}
+.cta-btn-primary:hover:not(:disabled){background:var(--action-red-dark);transform:translateY(-2px);box-shadow:0 14px 28px rgba(156,52,31,.28)}
+.cta-btn-secondary{background:var(--green-light);color:var(--green-dark);border:1.5px solid var(--green)}
+.cta-btn-secondary:hover:not(:disabled){border-color:var(--green-dark);background:var(--green);color:#fff;transform:translateY(-2px)}
 .cta-error{display:none;color:#b4453f;font-size:11.5px;font-weight:700;margin-top:10px}
 .cta-error.show{display:block}
 
@@ -699,8 +822,21 @@ footer{background:#0b100d;color:#fff;padding-top:68px}
 .footer-column h4{font-size:13px;margin-bottom:7px;letter-spacing:.04em}
 .footer-column a,.footer-column span{color:#8f9b95;font-size:13px;transition:color .2s var(--ease)}
 .footer-column a:hover{color:#fff}
-.footer-bottom{border-top:1px solid #202923;padding:20px 0}
-.footer-bottom .container{display:flex;justify-content:space-between;gap:20px;color:#606b65;font-size:11.5px}
+.footer-bottom{border-top:1px solid var(--border);padding:20px 0;background:var(--cream-2)}
+.footer-bottom .container{display:flex;justify-content:center}
+
+/* Credibility trust bar in the footer’s bottom strip — light background
+   with dark, bold text for maximum on-brand readability (replaces the
+   earlier dark-band/white-text treatment). */
+.footer-trustbar{display:flex;align-items:center;justify-content:center;gap:26px;flex-wrap:wrap;color:var(--dark);font-size:12px;font-weight:700}
+.ftb-rating{display:flex;align-items:center;gap:7px;padding-right:18px;border-right:1px solid var(--border)}
+.ftb-stars{color:var(--star);font-size:13px;letter-spacing:1px}
+.ftb-score{font-family:var(--font-display);font-weight:800;font-size:16px;color:var(--dark)}
+.ftb-rcount{color:var(--dark);font-size:11px;font-weight:700}
+.ftb-items{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.ftb-item{color:var(--dark);font-weight:700}
+.ftb-item b{color:var(--dark);font-weight:900}
+.ftb-copyright{color:var(--dark);font-size:11px;font-weight:700;padding-left:18px;border-left:1px solid var(--border)}
 
 /* Sticky mobile CTA */
 .mobile-cta{

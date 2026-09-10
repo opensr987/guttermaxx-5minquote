@@ -316,6 +316,7 @@
   var phone = $("#phone");
   var zip = $("#zip");
   var consent = $("#consent");
+  var homeownerCertify = $("#homeownerCertify");
   var formStatus = $("#formStatus");
   var leadData = null;       // last validated snapshot of the shared form
   var pendingRequest = null; // { request_id, territory, zip, address_key, formatted_address, lat, lng } from address-lookup, carried into quote-start
@@ -357,11 +358,19 @@
     f.addEventListener("change", function () { if (isValid(f)) showError(f, false); });
   });
 
-  var consentWrap = consent.closest(".consent-check");
+  var consentWrap = consent.closest(".consent-row");
   consent.addEventListener("change", function () {
     if (consent.checked) {
       consentWrap.classList.remove("invalid");
       $('.error[data-for="consent"]').classList.remove("show");
+    }
+  });
+
+  var homeownerCertifyWrap = homeownerCertify.closest(".consent-row");
+  homeownerCertify.addEventListener("change", function () {
+    if (homeownerCertify.checked) {
+      homeownerCertifyWrap.classList.remove("invalid");
+      $('.error[data-for="homeownerCertify"]').classList.remove("show");
     }
   });
 
@@ -381,6 +390,11 @@
     consentWrap.classList.toggle("invalid", !consentOk);
     $('.error[data-for="consent"]').classList.toggle("show", !consentOk);
     if (!consentOk && !firstBad) firstBad = consent;
+
+    var homeownerOk = homeownerCertify.checked;
+    homeownerCertifyWrap.classList.toggle("invalid", !homeownerOk);
+    $('.error[data-for="homeownerCertify"]').classList.toggle("show", !homeownerOk);
+    if (!homeownerOk && !firstBad) firstBad = homeownerCertify;
 
     if (firstBad) { firstBad.focus(); return null; }
 
@@ -636,6 +650,15 @@
           // reads canopy_status/measurement_status here to decide Path A
           // vs Path B. Logged for now so real production polling can be
           // verified end to end before the deck consumes it.
+          //
+          // IMPORTANT for whoever builds the deck: the instant the deck
+          // renders its LAST slide in front of the customer (real number
+          // shown, not just "ready on the backend"), call:
+          //   POST /api/quote-viewed  body: { submission_id }
+          // That call (not this status poll) is what moves the GHL
+          // opportunity to "5 Minute Estimate". Fire it exactly once, at
+          // that visual moment — the endpoint is idempotent so an extra
+          // call is harmless, but it must not fire earlier than this.
           console.log("[submissionTracker] status update", status.submission_id, status.canopy_status, status.measurement_status);
         });
         activeTracker.start();
@@ -821,6 +844,14 @@
   form.addEventListener("submit", function (event) {
     event.preventDefault();
 
+    // 5-MIN ESTIMATE TEMP-DISABLE GUARD — this build hides the 5-Minute
+    // Estimate CTA card (see app/page.js) while the slide deck it depends
+    // on is still being built. #ctaEstimate no longer exists in the DOM,
+    // so bail out before any of the address-lookup/OTP flow below runs
+    // (it would otherwise throw on the null button). Remove this block
+    // when the 3rd CTA is restored.
+    if (!$("#ctaEstimate")) return;
+
     var data = validateLeftForm();
     if (!data) return;
 
@@ -922,11 +953,14 @@
       submitLead(Object.assign({}, leadData, {
         next_step: step,
         next_step_chosen_at: new Date().toISOString()
-      })).catch(function (err) {
+      })).then(function (res) {
+        return res.json().catch(function () { return {}; });
+      }).catch(function (err) {
         console.error(err); // best-effort — still let them book below
-      }).then(function () {
+        return {};
+      }).then(function (body) {
         setBtnLoading(btn, false);
-        openBooking(step);
+        openBooking(step, body && body.booking_calendar_id);
       });
     });
   }
@@ -945,18 +979,29 @@
   // Used when a ZIP falls outside every territory (out of area or mistyped).
   var FALLBACK_TERRITORY = "dfw";
 
+  // Per-territory widget base URL, plus each step's DEFAULT calendar ID —
+  // used whenever the worker returns no lead-source-specific override (see
+  // bindBookingCta above). Defaults are the Website/organic calendar for
+  // in-home-demo and the Landing Page calendar for the 15-min Zoom, i.e.
+  // exactly what an untagged, direct site visitor should land on.
+  var BOOKING_BASE = {
+    dfw:     "https://dfw.tx.guttermaxx.com/widget/booking/",
+    houston: "https://houston.tx.guttermaxx.com/widget/booking/",
+    sanaus:  "https://sanantonio.austin.tx.guttermaxx.com/widget/booking/"
+  };
+
   var BOOKINGS = {
     dfw: {
-      "in-home-demo":   "https://dfw.tx.guttermaxx.com/widget/booking/jQu4BSi04kW3O5BWNLj9",
-      "virtual-15-min": "https://dfw.tx.guttermaxx.com/widget/booking/S2hBljugiSYRwa6fE6Ns"
+      "in-home-demo":   "RtqzGzNDTC5AwAVjVCof",
+      "virtual-15-min": "S2hBljugiSYRwa6fE6Ns"
     },
     houston: {
-      "in-home-demo":   "https://houston.tx.guttermaxx.com/widget/booking/mb9wxJVQrNrg7uPbA7qo",
-      "virtual-15-min": "https://houston.tx.guttermaxx.com/widget/booking/XP5kYxruHd2Rdyg0c70O"
+      "in-home-demo":   "Wnhl8qtYy5mVkHBiKFSb",
+      "virtual-15-min": "XP5kYxruHd2Rdyg0c70O"
     },
     sanaus: {
-      "in-home-demo":   "https://sanantonio.austin.tx.guttermaxx.com/widget/booking/k68wUyycpcYoyu9oyG0L",
-      "virtual-15-min": "https://sanantonio.austin.tx.guttermaxx.com/widget/booking/WwMyfr31G7Cv3jTOFpqY"
+      "in-home-demo":   "gK2b1DLDWd40ZYQHWJRQ",
+      "virtual-15-min": "WwMyfr31G7Cv3jTOFpqY"
     }
   };
 
@@ -1004,10 +1049,11 @@
     return base + (base.indexOf("?") === -1 ? "?" : "&") + qs;
   }
 
-  function openBooking(step) {
+  function openBooking(step, calendarIdOverride) {
     var key = (leadData && leadData.territory) || FALLBACK_TERRITORY;
     if (!BOOKINGS[key]) key = FALLBACK_TERRITORY;
-    var url = withPrefill(BOOKINGS[key][step]);
+    var calendarId = calendarIdOverride || BOOKINGS[key][step];
+    var url = withPrefill(BOOKING_BASE[key] + calendarId);
 
     lastFocus = document.activeElement;
     bookingTitle.textContent = STEP_TITLES[step] || "Book your appointment";
@@ -1217,6 +1263,13 @@
       showCtaError("attomRetryError", "That didn't go through. Try again, or call us directly.");
     });
   });
+
+
+  /* =====================================================
+     MINI COMPARE (before/after, above the CTA stack) —
+     static side-by-side image pair with a fixed center
+     divider. No drag/auto-sweep interaction by design.
+  ===================================================== */
 
 
   /* =====================================================

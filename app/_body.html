@@ -20,6 +20,7 @@
   <div class="links" id="navLinks"></div>
 
   <div class="header-trust" aria-label="GutterMaxx at a glance">
+    <span class="rating"><b>4.9</b><i aria-hidden="true">&#9733;</i> Rated</span>
     <span>40,000+ Homes Protected</span>
     <span>25+ Years in Texas</span>
     <span>Lifetime No-Clog Warranty</span>
@@ -798,7 +799,7 @@
 
   <div class="assessment-head reveal">
     <div class="kicker">Your Home. Your Design.</div>
-    <h2>Let's get you a plan.</h2>
+    <h2>Your Home. Protected For Life.</h2>
     <p>Enter your info once on the left, then pick how you'd like to move forward on the right.</p>
   </div>
 
@@ -867,16 +868,23 @@
 
           <input type="hidden" name="color_preference" id="colorPreference" value="">
 
-          <label class="consent-check">
-            <input type="checkbox" id="consent" name="consent" required>
-            <span>
-              I agree to receive automated calls or texts from GutterMaxx&trade;. Consent isn&rsquo;t required to buy.
-              Msg/data rates may apply. Reply STOP to opt out. By continuing, you accept our
-              <a href="https://guttermaxx.com/terms-of-use/" target="_blank" rel="noopener">Terms of Use</a> and
-              <a href="https://guttermaxx.com/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a>.
-            </span>
-          </label>
+          <div class="consent-group">
+            <label class="consent-row">
+              <input type="checkbox" id="consent" name="consent" required>
+              <span>
+                I agree to receive automated calls or texts from GutterMaxx&trade;. Consent isn&rsquo;t required to buy.
+                Msg/data rates may apply. Reply STOP to opt out. By continuing, you accept our
+                <a href="https://guttermaxx.com/terms-of-use/" target="_blank" rel="noopener">Terms of Use</a> and
+                <a href="https://guttermaxx.com/privacy-policy/" target="_blank" rel="noopener">Privacy Policy</a>.
+              </span>
+            </label>
+            <label class="consent-row">
+              <input type="checkbox" id="homeownerCertify" name="homeowner_certify" required>
+              <span>I certify that I am a homeowner at the address provided above.</span>
+            </label>
+          </div>
           <p class="error" data-for="consent">Please agree to continue before choosing an option.</p>
+          <p class="error" data-for="homeownerCertify">Please confirm you're the homeowner to continue.</p>
 
           <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
 
@@ -893,33 +901,74 @@
 
     </div>
 
-    <!-- RIGHT: 3 choices -->
-    <div class="cta-stack reveal" style="--d:180ms">
+    <!-- RIGHT: trust slider + 3 choices -->
+    <div class="right-col reveal" style="--d:180ms">
 
+      <!-- Before/after compare slider — desktop-only sizzle, sits above the
+           CTAs. Hidden below 901px so it never competes with the form/CTAs
+           for the tight mobile zero-scroll budget. -->
+      <div class="mini-compare" id="miniCompare">
+        <div class="mc-frame" id="mcFrame">
+          <img class="mc-img mc-before" src="assets/gutter-before.jpg" alt="Clogged gutter before GutterMaxx" draggable="false" style="clip-path:inset(0 50% 0 0)">
+          <img class="mc-img mc-after" src="assets/gutter-after.jpg" alt="Real GutterMaxx no-clog gutter cover installed on a home" draggable="false" style="clip-path:inset(0 0 0 50%)">
+          <div class="mc-tag mc-tag-before">BEFORE</div>
+          <div class="mc-tag mc-tag-after">AFTER</div>
+          <div class="mc-divider" aria-hidden="true"></div>
+        </div>
+        <p class="mc-caption"><b>4.9&#9733;</b> rated, 40,000+ homes protected</p>
+      </div>
+
+      <div class="cta-stack">
+
+      <!-- ============================================================
+           5-MINUTE ESTIMATE CTA is TEMPORARILY HIDDEN (2026-09-09).
+           This is the FULL 3-CTA version's primary card. It is intact
+           here on purpose, not deleted. It depends on the slide-deck
+           flow (Gate logic, quote-start/canopy pipeline, GHL 5ME stage
+           sync) that is still being built.
+           TO RESTORE: delete the HTML comment markers that open just
+           above this line and close just below the closing div, and
+           remove the matching guard in public/landing.js marked
+           5-MIN ESTIMATE TEMP-DISABLE GUARD (search that phrase).
+           Full working copy of this state is also preserved at
+           /home/user/workspace/frontend_repo_3CTA_BACKUP_20260909
+           and git branch three-cta-full-2026-09-09.
+           ============================================================
       <div class="cta-card cta-primary">
         <div class="cta-kicker">Fastest option</div>
-        <h3>Get Your Home&rsquo;s GutterMaxx Estimate In Under 5 Minutes!</h3>
+        <div class="cta-head">
+          <img class="cta-avatar" src="assets/cta-woman-phone.jpg" alt="" aria-hidden="true">
+          <h3>Get Your Home&rsquo;s GutterMaxx Estimate<br>In Under 5 Minutes!</h3>
+        </div>
         <p>We&rsquo;ll text you a verification code, then price your gutters in real time.</p>
         <button type="submit" form="assessmentForm" class="cta-btn cta-btn-primary" id="ctaEstimate" data-step="quote-5-min">
           GET ESTIMATE <span class="arw" aria-hidden="true">&rarr;</span>
         </button>
+        <p class="cta-trust-chip"><b>4.9&#9733;</b> Rated &middot; Licensed &amp; Insured &middot; No obligation</p>
         <p class="cta-error" id="ctaEstimateError" role="alert"></p>
       </div>
+      -->
 
       <div class="cta-card">
-        <h3>15-Minute Zoom with a GutterMaxx Pro</h3>
+        <div class="cta-head">
+          <img class="cta-avatar" src="assets/cta-pro-headshot.jpg" alt="" aria-hidden="true">
+          <h3>15-Minute Zoom with a GutterMaxx Pro</h3>
+        </div>
         <p>Walk through pricing and options live over video.</p>
         <button type="button" class="cta-btn cta-btn-secondary" id="ctaZoom" data-step="virtual-15-min">
-          Book a Zoom call <span class="arw" aria-hidden="true">&rarr;</span>
+          <span class="cta-btn-label">Book a Zoom Meeting</span> <span class="arw" aria-hidden="true">&rarr;</span>
         </button>
         <p class="cta-error" id="ctaZoomError" role="alert"></p>
       </div>
 
       <div class="cta-card">
-        <h3>Book an In-Home Demo</h3>
+        <div class="cta-head">
+          <img class="cta-avatar" src="assets/cta-clipboard-roofline.jpg" alt="" aria-hidden="true">
+          <h3>Book a FREE In Home Demo/Inspection</h3>
+        </div>
         <p>See the system on your own roofline &mdash; no cost, no pressure.</p>
         <button type="button" class="cta-btn cta-btn-secondary" id="ctaDemo" data-step="in-home-demo">
-          Schedule my demo <span class="arw" aria-hidden="true">&rarr;</span>
+          <span class="cta-btn-label">Book your FREE In-Home Demo (60 minutes)</span> <span class="arw" aria-hidden="true">&rarr;</span>
         </button>
         <p class="cta-error" id="ctaDemoError" role="alert"></p>
       </div>
@@ -940,6 +989,8 @@
           </a>
         </div>
         <p class="cta-error" id="attomRetryError" role="alert"></p>
+      </div>
+
       </div>
 
     </div>
@@ -1009,9 +1060,19 @@
 </div>
 
 <div class="footer-bottom">
-  <div class="container">
-    <span>&copy; <span id="year">2026</span> GutterMaxx&trade;. All rights reserved.</span>
-    <span>Engineered for Protection. Designed for Performance.</span>
+  <div class="container footer-trustbar">
+    <div class="ftb-rating">
+      <span class="ftb-stars" aria-hidden="true">&#9733;&#9733;&#9733;&#9733;&#9733;</span>
+      <span class="ftb-score">4.9</span>
+      <span class="ftb-rcount">500+ Reviews</span>
+    </div>
+    <div class="ftb-items">
+      <span class="ftb-item"><b>40,000+</b> Homes Protected</span>
+      <span class="ftb-item"><b>25+ Years</b> in Texas</span>
+      <span class="ftb-item"><b>Licensed</b> &amp; Insured</span>
+      <span class="ftb-item"><b>Lifetime</b> No-Clog Warranty</span>
+    </div>
+    <span class="ftb-copyright">&copy; <span id="year">2026</span> GutterMaxx&trade;</span>
   </div>
 </div>
 </footer>
