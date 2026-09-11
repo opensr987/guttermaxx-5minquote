@@ -823,6 +823,8 @@ const BODY_HTML = `
 
         <form id="assessmentForm" novalidate>
 
+          <p class="form-validation-banner" id="formValidationBanner" role="alert" tabindex="-1">Please complete the highlighted field(s) below to continue.</p>
+
           <div class="form-row">
             <div>
               <label for="first_name">First name <span class="req-mark" aria-hidden="true">*</span></label>

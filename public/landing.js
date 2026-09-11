@@ -318,6 +318,7 @@
   var consent = $("#consent");
   var homeownerCertify = $("#homeownerCertify");
   var formStatus = $("#formStatus");
+  var formValidationBanner = $("#formValidationBanner");
   var leadData = null;       // last validated snapshot of the shared form
   var pendingRequest = null; // { request_id, territory, zip, address_key, formatted_address, lat, lng } from address-lookup, carried into quote-start
   var attomRetry = null;     // Gate 7 (ATTOM_NOT_FOUND) state: { request_id, submission_id, attempt, max_attempts, final, phone_display, phone_digits }, set once quote-start reports a not-found property
@@ -351,11 +352,23 @@
     return true;
   }
 
+  // Once the banner/status message has been shown for an incomplete
+  // submit attempt, drop it the moment every field + checkbox is valid
+  // again — so fixing the last highlighted problem clears the message
+  // without requiring another button click.
+  function maybeClearValidationBanner() {
+    var stillBad = fields.some(function (f) { return !isValid(f); }) || !consent.checked || !homeownerCertify.checked;
+    if (!stillBad) {
+      if (formValidationBanner) formValidationBanner.classList.remove("show");
+      setStatus("");
+    }
+  }
+
   var fields = ["first_name", "last_name", "phone", "email", "address", "zip"].map(function (id) { return $("#" + id); });
   fields.forEach(function (f) {
     f.addEventListener("blur", function () { showError(f, !isValid(f)); });
-    f.addEventListener("input", function () { if (f.classList.contains("invalid") && isValid(f)) showError(f, false); });
-    f.addEventListener("change", function () { if (isValid(f)) showError(f, false); });
+    f.addEventListener("input", function () { if (f.classList.contains("invalid") && isValid(f)) { showError(f, false); maybeClearValidationBanner(); } });
+    f.addEventListener("change", function () { if (isValid(f)) { showError(f, false); maybeClearValidationBanner(); } });
   });
 
   var consentWrap = consent.closest(".consent-row");
@@ -363,6 +376,7 @@
     if (consent.checked) {
       consentWrap.classList.remove("invalid");
       $('.error[data-for="consent"]').classList.remove("show");
+      maybeClearValidationBanner();
     }
   });
 
@@ -371,6 +385,7 @@
     if (homeownerCertify.checked) {
       homeownerCertifyWrap.classList.remove("invalid");
       $('.error[data-for="homeownerCertify"]').classList.remove("show");
+      maybeClearValidationBanner();
     }
   });
 
@@ -396,7 +411,30 @@
     $('.error[data-for="homeownerCertify"]').classList.toggle("show", !homeownerOk);
     if (!homeownerOk && !firstBad) firstBad = homeownerCertify;
 
-    if (firstBad) { firstBad.focus(); return null; }
+    if (firstBad) {
+      // Guaranteed scroll-to-error: don't rely on the browser's own
+      // focus()-triggered scroll (inconsistent across browsers, and a
+      // no-op if the field is technically "in" a tall viewport but not
+      // comfortably visible). Center it explicitly, then focus once the
+      // scroll has had a beat to start so focus doesn't fight/cancel the
+      // smooth-scroll animation.
+      firstBad.scrollIntoView({ behavior: "smooth", block: "center" });
+      window.setTimeout(function () { firstBad.focus({ preventScroll: true }); }, 260);
+
+      // Clear validation message — a single always-visible banner at the
+      // top of the form, so the "why didn't that button do anything?"
+      // moment has an obvious, attention-grabbing answer regardless of
+      // which field is missing or where the user scrolled to.
+      if (formValidationBanner) {
+        formValidationBanner.textContent = "Please complete the highlighted field(s) below to continue.";
+        formValidationBanner.classList.add("show");
+      }
+      setStatus("Please complete the highlighted field(s) above to continue.", true);
+      return null;
+    }
+
+    if (formValidationBanner) formValidationBanner.classList.remove("show");
+    setStatus("");
 
     return {
       first_name: $("#first_name").value.trim(),

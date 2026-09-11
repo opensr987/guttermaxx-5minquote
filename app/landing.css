@@ -220,6 +220,7 @@ footer{padding-top:0 !important;flex:0 0 auto !important}
 label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5vh,6px) !important}
 .form-card input:not([type=checkbox]),.form-card select{height:clamp(32px,5.4vh,44px) !important;font-size:clamp(12px,1.4vh,14px) !important}
 .error{font-size:clamp(9.5px,1.1vh,11px) !important;margin-top:clamp(2px,0.4vh,4px) !important}
+.form-validation-banner{font-size:clamp(10.5px,1.15vh,13px) !important;padding:clamp(7px,1vh,11px) clamp(10px,1.2vw,14px) !important;margin-bottom:clamp(8px,1.2vh,16px) !important}
 .consent-group{margin-top:clamp(5px,1vh,12px) !important;padding:0 clamp(10px,1.4vw,15px) !important}
 .consent-row{padding:clamp(4px,0.8vh,9px) 0 !important;gap:8px !important}
 .consent-row span{font-size:clamp(9px,1.05vh,11px) !important}
@@ -586,6 +587,9 @@ label{display:block;font-size:12px;font-weight:800;margin-bottom:6px}
 .form-card input.invalid,.form-card select.invalid{border-color:#b4453f;box-shadow:0 0 0 3px rgba(180,69,63,.1)}
 .error{display:none;color:#b4453f;font-size:11.5px;font-weight:700;margin-top:5px}
 .error.show{display:block}
+.form-validation-banner{display:none;background:var(--action-red-light);border:1px solid #b4453f;color:var(--action-red-dark);font-size:13px;font-weight:800;line-height:1.4;padding:11px 14px;border-radius:12px;margin-bottom:16px}
+.form-validation-banner.show{display:block;animation:banner-in .25s ease-out}
+@keyframes banner-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
 .hp{position:absolute;left:-9999px;opacity:0;height:0;width:0}
 .spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block;vertical-align:-3px}
 @keyframes spin{to{transform:rotate(360deg)}}
