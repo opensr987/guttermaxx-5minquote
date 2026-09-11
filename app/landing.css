@@ -270,6 +270,7 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .ftb-rating{border-right:0 !important;padding-right:0 !important}
   .form-row{grid-template-columns:1fr 1fr !important;gap:8px !important}
   .cta-card p{display:none !important}
+  .cta-card .cta-confirm-error.show{display:block !important}
   .cta-kicker{font-size:8px !important;padding:2px 6px !important;margin-bottom:3px !important}
   .cta-card h3,.cta-primary h3{font-size:clamp(12px,2.2vh,16px) !important;margin-bottom:0 !important}
   .cta-card{padding:clamp(8px,1.8vh,16px) !important}
@@ -289,15 +290,19 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .form-title>span{margin-bottom:2px !important}
   .form-title p{display:none !important}
   .form-logo{display:none !important}
-  /* 3 stacked full cards + a 6-field form is taller than any phone
-     viewport even at floor sizes. Keep the primary "Get Estimate" card
-     full-width/prominent, but fold the two secondary CTAs into a
-     half-width row with the benefit copy dropped (the button label
-     already states the action) so all 3 stay visible with no scroll. */
-  .cta-stack{grid-template-columns:1fr 1fr !important}
+  /* Secondary CTAs (Zoom / In-Home Demo) drop their benefit copy on
+     mobile — the button label already states the action — but each
+     stays full-width and stacked. A half-width side-by-side fold was
+     tried here and reverted: once the In-Home Demo card carries the
+     required homeowner-confirmation checkbox, a half column squeezes
+     that sentence into unreadable micro-text and grid stretch leaves
+     an ugly gap in the shorter Zoom card next to it. Full-width stacked
+     cards may add a little scroll on the shortest phones, but read
+     clean at every width — worth the trade. */
+  .cta-stack{grid-template-columns:1fr !important;align-items:start !important}
   .cta-primary{grid-column:1/-1 !important}
   .cta-card:not(.cta-primary) .cta-head{display:none !important}
-  .cta-card:not(.cta-primary) .cta-btn{margin-top:0 !important;font-size:8.5px !important;padding:0 4px !important;white-space:normal !important;line-height:1.1 !important;height:clamp(28px,5vh,36px) !important;gap:2px !important}
+  .cta-card:not(.cta-primary) .cta-btn{margin-top:0 !important}
   /* Further mobile-only floor trims — every field/row/gap shaved a bit
      tighter than the shared desktop floors above so the full form + all
      3 CTAs clear the shortest common phone heights with no scroll. */
