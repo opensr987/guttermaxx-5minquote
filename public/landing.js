@@ -325,7 +325,13 @@
   var activeTracker = null;  // this tab's live submissionTracker (see createSubmissionTracker below) — one per successful quote-start call, never shared or looked up by name/phone/address
 
   phone.addEventListener("input", function () {
-    var d = phone.value.replace(/\D/g, "").slice(0, 10);
+    var d = phone.value.replace(/\D/g, "");
+    // Strip a leading US country code ("1") before capping at 10 digits —
+    // the placeholder shows "+1 (555) 000-0000", so anyone typing or
+    // pasting a leading 1/+1 would otherwise have their real trailing
+    // digit silently truncated instead of the country code.
+    if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+    d = d.slice(0, 10);
     phone.value = d.length > 6 ? "(" + d.slice(0, 3) + ") " + d.slice(3, 6) + "-" + d.slice(6)
                 : d.length > 3 ? "(" + d.slice(0, 3) + ") " + d.slice(3)
                 : d.length     ? "(" + d
