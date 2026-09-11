@@ -993,18 +993,27 @@
         submitted_at: new Date().toISOString()
       });
 
-      setBtnLoading(btn, true, "One moment\u2026");
+      // Open the calendar immediately with the territory's default
+      // booking link — it's already known client-side, so the visitor
+      // never waits on the CRM round trip just to see available times.
+      // Lead capture (GHL contact/opportunity sync + Supabase row) still
+      // runs, just in the background; if it comes back with a
+      // lead-source-specific calendar override (e.g. NextDoor), swap it
+      // into the still-open modal behind the scenes.
+      openBooking(step);
+
       submitLead(Object.assign({}, leadData, {
         next_step: step,
         next_step_chosen_at: new Date().toISOString()
       })).then(function (res) {
         return res.json().catch(function () { return {}; });
       }).catch(function (err) {
-        console.error(err); // best-effort — still let them book below
+        console.error(err); // best-effort — booking is already open
         return {};
       }).then(function (body) {
-        setBtnLoading(btn, false);
-        openBooking(step, body && body.booking_calendar_id);
+        if (body && body.booking_calendar_id && bookingModal.classList.contains("open")) {
+          openBooking(step, body.booking_calendar_id);
+        }
       });
     });
   }
