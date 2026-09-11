@@ -958,6 +958,11 @@ const BODY_HTML = `
           <h3>Book a FREE In Home Demo/Inspection</h3>
         </div>
         <p>See the system on your own roofline &mdash; no cost, no pressure.</p>
+        <label class="consent-row cta-confirm-row" id="ctaDemoConfirmRow">
+          <input type="checkbox" id="ctaDemoConfirm" name="in_home_demo_confirm">
+          <span>I confirm that all homeowners and decision-makers will be present together and available for the full 60-minute In-Home Demonstration.</span>
+        </label>
+        <p class="error cta-confirm-error" data-for="ctaDemoConfirm">Please confirm before booking &mdash; all homeowners/decision-makers must be present for the full 60 minutes.</p>
         <button type="button" class="cta-btn cta-btn-secondary" id="ctaDemo" data-step="in-home-demo">
           <span class="cta-btn-label">Book your FREE In-Home Demo (60 minutes)</span> <span class="arw" aria-hidden="true">&rarr;</span>
         </button>
