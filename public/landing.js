@@ -1029,11 +1029,44 @@
   });
 
 
+  /* ---------- In-Home Demo only: block booking until the visitor confirms
+     all homeowners/decision-makers will be present for the full 60 minutes.
+     Mirrors the existing consent/homeownerCertify invalid-state pattern. ---------- */
+  function bindConfirmGate(checkboxId) {
+    var box = $("#" + checkboxId);
+    if (!box) return;
+    var wrap = box.closest(".consent-row");
+    var err = $('.error[data-for="' + checkboxId + '"]');
+    box.addEventListener("change", function () {
+      if (box.checked) {
+        if (wrap) wrap.classList.remove("invalid");
+        if (err) err.classList.remove("show");
+      }
+    });
+  }
+
+  function checkConfirmGate(checkboxId) {
+    if (!checkboxId) return true;
+    var box = $("#" + checkboxId);
+    if (!box) return true;
+    if (box.checked) return true;
+    var wrap = box.closest(".consent-row");
+    if (wrap) wrap.classList.add("invalid");
+    var err = $('.error[data-for="' + checkboxId + '"]');
+    if (err) err.classList.add("show");
+    box.focus();
+    return false;
+  }
+
+  bindConfirmGate("ctaDemoConfirm");
+
   /* ---------- 15-min Zoom / In-Home Demo: validate -> lead-capture -> booking modal ---------- */
-  function bindBookingCta(buttonId, errorId, step) {
+  function bindBookingCta(buttonId, errorId, step, confirmCheckboxId) {
     var btn = $("#" + buttonId);
     if (!btn) return;
     btn.addEventListener("click", function () {
+      if (!checkConfirmGate(confirmCheckboxId)) return;
+
       var data = validateLeftForm();
       if (!data) return;
 
@@ -1320,7 +1353,7 @@
      WIRE THE 15-MIN ZOOM / IN-HOME DEMO CTAs
   ===================================================== */
   bindBookingCta("ctaZoom", "ctaZoomError", "virtual-15-min");
-  bindBookingCta("ctaDemo", "ctaDemoError", "in-home-demo");
+  bindBookingCta("ctaDemo", "ctaDemoError", "in-home-demo", "ctaDemoConfirm");
 
 
   /* =====================================================
