@@ -35,11 +35,64 @@
      resolves the tag, GHL label, and any calendar override; this
      page only needs to pass the raw key through untouched.
   ===================================================== */
+  // ---------------------------------------------------------------------
+  // Lead-source detection, in priority order:
+  //
+  //   1. Explicit ?lead_source= or ?utm_source= — always wins when present.
+  //      This is the only way to get exact channel keys that share a
+  //      platform (google vs google_lsa vs youtube all live on Google's
+  //      infrastructure and cannot be told apart by click-id alone — see
+  //      note below).
+  //   2. Ad-platform auto-tagging click IDs. These are appended by the ad
+  //      platform itself to every click-through URL with ZERO campaign
+  //      configuration required, so they cover us before any explicit
+  //      ?lead_source= links are ever set up:
+  //        fbclid   -> Meta (Facebook/Instagram) auto-appends on every
+  //                    click from the FB/IG apps, paid or organic.
+  //        ttclid   -> TikTok Ads click identifier.
+  //        msclkid  -> Microsoft/Bing Ads click identifier.
+  //        gclid / gclsrc -> Google Ads auto-tagging. IMPORTANT LIMIT:
+  //                    Google does not expose a click-id that tells Search,
+  //                    Display, YouTube, and Local Services Ads apart from
+  //                    each other — gclid alone can only prove "some Google
+  //                    ad product," so it resolves to the generic "google"
+  //                    bucket. To land in "google_lsa" or "youtube"
+  //                    specifically, that campaign's destination URL still
+  //                    needs an explicit ?lead_source= value.
+  //   3. document.referrer domain — last-resort fallback for cases with no
+  //      click-id at all (some in-app browsers strip query params, or a
+  //      link was shared without one). Same Google caveat applies: a
+  //      google.com referrer covers organic search too, so we deliberately
+  //      do NOT treat it as a "google" signal here — only referrers unique
+  //      to one specific platform (NextDoor, YouTube, TikTok, FB/IG).
+  //   4. Falls back to "website" (organic/direct), same as before.
+  // ---------------------------------------------------------------------
   function detectLeadSource() {
     try {
       var params = new URLSearchParams(window.location.search);
-      var raw = params.get("lead_source") || params.get("utm_source") || "website";
-      return raw.trim().toLowerCase() || "website";
+
+      var explicit = params.get("lead_source") || params.get("utm_source");
+      if (explicit && explicit.trim()) return explicit.trim().toLowerCase();
+
+      if (params.has("fbclid")) return "facebook";
+      if (params.has("ttclid")) return "tiktok";
+      if (params.has("msclkid")) return "bing";
+      if (params.has("gclid") || params.has("gclsrc")) return "google";
+
+      var ref = "";
+      try { ref = (document.referrer || "").toLowerCase(); } catch (e) {}
+      if (ref) {
+        if (ref.indexOf("nextdoor.com") > -1) return "nextdoor";
+        if (ref.indexOf("youtube.com") > -1 || ref.indexOf("youtu.be") > -1) return "youtube";
+        if (ref.indexOf("tiktok.com") > -1) return "tiktok";
+        if (
+          ref.indexOf("facebook.com") > -1 ||
+          ref.indexOf("l.facebook.com") > -1 ||
+          ref.indexOf("instagram.com") > -1
+        ) return "facebook";
+      }
+
+      return "website";
     } catch (e) {
       return "website";
     }
