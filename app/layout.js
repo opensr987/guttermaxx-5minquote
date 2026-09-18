@@ -36,8 +36,34 @@ export default function RootLayout({ children }) {
         />
         <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" async></script>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+        {/* Nextdoor Pixel */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `!function(e,n){var t,p;e.ndp||((t=e.ndp=function(){
+t.handleRequest?t.handleRequest.apply(t,arguments):t.queue.push(arguments)
+}).queue=[],t.v=1,(p=n.createElement(e="script")).async=!0,
+p.src="https://ads.nextdoor.com/public/pixel/ndp.js?id=709c408d-3b02-41d7-aa82-0162274b14ca",
+(n=n.getElementsByTagName(e)[0]).parentNode.insertBefore(p,n))
+}(window,document);
+
+ndp('init','709c408d-3b02-41d7-aa82-0162274b14ca', {});
+ndp('track','PAGE_VIEW');`,
+          }}
+        />
       </head>
-      <body>{children}</body>
+      <body>
+        {/* Nextdoor Pixel fallback (no JS) */}
+        <noscript>
+          <img
+            height="1"
+            width="1"
+            style={{ display: "none" }}
+            src="https://flask.nextdoor.com/pixel?pid=709c408d-3b02-41d7-aa82-0162274b14ca&ev=PAGE_VIEW&noscript=1"
+            alt=""
+          />
+        </noscript>
+        {children}
+      </body>
     </html>
   );
 }
