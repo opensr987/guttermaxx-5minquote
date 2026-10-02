@@ -590,10 +590,11 @@
   //   GM5ME.action("price_locked")       Lock In My Price
   //   GM5ME.action("financing_started")  Qualify for Payments
   //   GM5ME.action("savings_inquiry")    Click to Call card
-  //   GM5ME.callMeNow(["senior", ...])   Call Me Now! on Check Qualifying Discounts
+  //   GM5ME.callMeNow(["senior", ...], otherText)   Call Me Now! on Check Qualifying Discounts
+  //     (otherText = customer's 15-char note when "other" is picked)
   // ---------------------------------------------------------------------
   var DECK_ACTIONS = ["price_viewed", "price_locked", "financing_started", "savings_inquiry"];
-  var DISCOUNT_IDS = ["senior", "military", "first-responder", "teacher-healthcare", "neighbor-referral", "pay-in-full"];
+  var DISCOUNT_IDS = ["senior", "military", "first-responder", "teacher-healthcare", "neighbor-referral", "pay-in-full", "other"];
 
   function createDeckReporter(submissionId) {
     var sent = {};
@@ -618,11 +619,14 @@
       if (DECK_ACTIONS.indexOf(name) === -1) return Promise.resolve({ skipped: true, reason: "unknown_action" });
       return post({ action: name }, name);
     }
-    function callMeNow(discounts) {
+    function callMeNow(discounts, otherText) {
       var picked = (Array.isArray(discounts) ? discounts : []).map(function (d) { return String(d).toLowerCase(); })
         .filter(function (d, i, a) { return DISCOUNT_IDS.indexOf(d) !== -1 && a.indexOf(d) === i; })
         .sort(function (a, b) { return DISCOUNT_IDS.indexOf(a) - DISCOUNT_IDS.indexOf(b); });
-      return post({ action: "savings_inquiry", callback: true, discounts: picked }, "callme:" + picked.join(","));
+      var body = { action: "savings_inquiry", callback: true, discounts: picked };
+      var other = picked.indexOf("other") !== -1 ? String(otherText || "").replace(/\s+/g, " ").trim().slice(0, 15) : "";
+      if (other) body.discount_other = other;
+      return post(body, "callme:" + picked.join(",") + (other ? "|" + other : ""));
     }
     return {
       submissionId: submissionId,
