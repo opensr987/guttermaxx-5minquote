@@ -15,6 +15,7 @@
   var QUOTE_START_URL    = WORKER_BASE + "/api/quote-start";
   var QUOTE_STATUS_URL   = WORKER_BASE + "/api/quote-status";
   var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
+  var QUOTE_VIEWED_URL   = WORKER_BASE + "/api/quote-viewed";
 
   // Cloudflare Turnstile — invisible bot check. Site key is public by
   // design (safe to ship in client code); the paired secret key lives only
@@ -578,6 +579,59 @@
   //   activeTracker.start();   // begins polling
   //   activeTracker.stop();    // call when the deck navigates away
   // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Deck -> worker bridge (5ME). The slide deck calls ONLY this; it never
+  // builds its own requests. Bound to this tab's own submission_id (same
+  // guarantee as the tracker above). The worker moves the GHL opportunity
+  // forward-only and fills the 5ME fields, so repeats are harmless; the
+  // dedupe here just avoids needless traffic.
+  //
+  //   GM5ME.priceShown()                 Price Rollout rendered with the real number
+  //   GM5ME.action("price_locked")       Lock In My Price
+  //   GM5ME.action("financing_started")  Qualify for Payments
+  //   GM5ME.action("savings_inquiry")    Click to Call card
+  //   GM5ME.callMeNow(["senior", ...])   Call Me Now! on Check Qualifying Discounts
+  // ---------------------------------------------------------------------
+  var DECK_ACTIONS = ["price_viewed", "price_locked", "financing_started", "savings_inquiry"];
+  var DISCOUNT_IDS = ["senior", "military", "first-responder", "teacher-healthcare", "neighbor-referral", "pay-in-full"];
+
+  function createDeckReporter(submissionId) {
+    var sent = {};
+    function post(body, key) {
+      if (sent[key]) return Promise.resolve({ skipped: true });
+      sent[key] = true;
+      return fetch(QUOTE_VIEWED_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ submission_id: submissionId }, body)),
+        keepalive: true // finishes even if the click opens tel: or leaves the page
+      }).then(function (res) {
+        if (!res.ok) sent[key] = false; // allow a later retry
+        return res.json().catch(function () { return null; });
+      }).catch(function (err) {
+        sent[key] = false;
+        console.error("[GM5ME] report failed", body.action, err);
+        return null;
+      });
+    }
+    function action(name) {
+      if (DECK_ACTIONS.indexOf(name) === -1) return Promise.resolve({ skipped: true, reason: "unknown_action" });
+      return post({ action: name }, name);
+    }
+    function callMeNow(discounts) {
+      var picked = (Array.isArray(discounts) ? discounts : []).map(function (d) { return String(d).toLowerCase(); })
+        .filter(function (d, i, a) { return DISCOUNT_IDS.indexOf(d) !== -1 && a.indexOf(d) === i; })
+        .sort(function (a, b) { return DISCOUNT_IDS.indexOf(a) - DISCOUNT_IDS.indexOf(b); });
+      return post({ action: "savings_inquiry", callback: true, discounts: picked }, "callme:" + picked.join(","));
+    }
+    return {
+      submissionId: submissionId,
+      priceShown: function () { return action("price_viewed"); },
+      action: action,
+      callMeNow: callMeNow
+    };
+  }
+
   function createSubmissionTracker(submissionId, onUpdate) {
     var POLL_MS = 3000;
     var MAX_WAIT_MS = 120000; // stop polling after 2 minutes either way
@@ -743,22 +797,14 @@
       if (activeTracker) { activeTracker.stop(); }
       if (result.body && result.body.submission_id && result.body.status === "processing") {
         activeTracker = createSubmissionTracker(result.body.submission_id, function (status) {
-          // Placeholder hook — the slide deck (Slides 2-5, not yet built)
-          // reads canopy_status/measurement_status here to decide Path A
-          // vs Path B. Logged for now so real production polling can be
-          // verified end to end before the deck consumes it.
-          //
-          // IMPORTANT for whoever builds the deck: the instant the deck
-          // renders its LAST slide in front of the customer (real number
-          // shown, not just "ready on the backend"), call:
-          //   POST /api/quote-viewed  body: { submission_id }
-          // That call (not this status poll) is what moves the GHL
-          // opportunity to "5 Minute Estimate". Fire it exactly once, at
-          // that visual moment — the endpoint is idempotent so an extra
-          // call is harmless, but it must not fire earlier than this.
+          // The slide deck reads canopy_status/measurement_status here to
+          // pick its path. Price/click reporting goes through window.GM5ME
+          // (createDeckReporter above): call GM5ME.priceShown() the instant
+          // the real price is on screen — never earlier.
           console.log("[submissionTracker] status update", status.submission_id, status.canopy_status, status.measurement_status);
         });
         activeTracker.start();
+        window.GM5ME = createDeckReporter(result.body.submission_id);
       }
 
       showQuoteTransition();
