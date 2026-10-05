@@ -17,6 +17,21 @@
   var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
   var QUOTE_VIEWED_URL   = WORKER_BASE + "/api/quote-viewed";
 
+  // Pre-launch / QA only: ?testkey=... on the page URL is remembered for
+  // this tab and sent to address-lookup + quote-start, where the worker
+  // skips the 2-per-6-months limit ONLY if it exactly matches the
+  // RATE_LIMIT_TEST_KEY env var (unset = no effect). Customers never have it.
+  var TEST_KEY = (function () {
+    try {
+      var k = new URLSearchParams(window.location.search).get("testkey");
+      if (k) sessionStorage.setItem("gm_testkey", k);
+      return sessionStorage.getItem("gm_testkey") || "";
+    } catch (e) { return ""; }
+  })();
+
+  // Customer deck (built from the reviewed deck; see public/deck/).
+  var DECK_URL = "/deck/player.html";
+
   // Cloudflare Turnstile — invisible bot check. Site key is public by
   // design (safe to ship in client code); the paired secret key lives only
   // in the worker's server-side environment and is never exposed here.
@@ -692,6 +707,61 @@
     };
   }
 
+  /* ---------- Customer deck: full-window overlay for this tab's submission ---------- */
+  function openDeck(submissionId) {
+    var existing = $("#deckOverlay");
+    if (existing) existing.parentNode.removeChild(existing);
+    var addr = (pendingRequest && pendingRequest.formatted_address) || (leadData && leadData.address) || "";
+    addr = String(addr).replace(/,\s*USA$/, "");
+    var overlay = document.createElement("div");
+    overlay.id = "deckOverlay";
+    overlay.className = "deck-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", "Your GutterMaxx estimate");
+    var frame = document.createElement("iframe");
+    frame.id = "deckFrame";
+    frame.title = "Your GutterMaxx estimate";
+    frame.setAttribute("allow", "autoplay; fullscreen");
+    frame.src = DECK_URL + "?sid=" + encodeURIComponent(submissionId) + (addr ? "&addr=" + encodeURIComponent(addr) : "");
+    overlay.appendChild(frame);
+    document.body.appendChild(overlay);
+    document.body.classList.add("deck-open");
+    try { frame.focus(); } catch (e) {}
+  }
+
+  // Deck -> page bridges (the deck runs in a same-origin iframe).
+  // Booking: same GHL calendars as the landing-page Zoom / In-Home Demo CTAs,
+  // routed by the customer's ZIP.
+  window.GM5MEBook = function (step) {
+    if (step !== "virtual-15-min" && step !== "in-home-demo") return;
+    openBooking(step, null, territoryFor(leadData && leadData.zip));
+  };
+  // MANUAL_REVIEW screen's "Submit for Review" -> ManualReview@ alias.
+  window.GM5MEManualReview = function () {
+    var sid = window.GM5ME && window.GM5ME.submissionId;
+    return getTurnstileToken().then(function (turnstileToken) {
+      return fetch(MANUAL_REVIEW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome: "MANUAL_REVIEW",
+          request_id: pendingRequest && pendingRequest.request_id,
+          submission_id: sid,
+          first_name: leadData && leadData.first_name,
+          last_name: leadData && leadData.last_name,
+          phone: leadData && leadData.phone,
+          email: leadData && leadData.email,
+          address: leadData && leadData.address,
+          zip: leadData && leadData.zip,
+          territory: leadData && leadData.territory,
+          turnstile_token: turnstileToken
+        })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { return Boolean(res.ok && body && body.ok); });
+    }).catch(function (err) { console.error(err); return false; });
+  };
+
   function showQuoteTransition() {
     formContainer.classList.add("hide");
     quoteTransition.classList.add("show");
@@ -759,6 +829,7 @@
       email: leadData.email,
       lead_source: LEAD_SOURCE
     };
+    if (TEST_KEY) payload.test_key = TEST_KEY;
 
     return fetch(QUOTE_START_URL, {
       method: "POST",
@@ -809,6 +880,18 @@
         });
         activeTracker.start();
         window.GM5ME = createDeckReporter(result.body.submission_id);
+        showQuoteTransition();
+        openDeck(result.body.submission_id);
+        return;
+      }
+      // Gate 6 manual review: the deck still plays its opening, then
+      // quote-status hands back MANUAL_REVIEW at the fork and the deck shows
+      // the "Submit for Review" screen (window.GM5MEManualReview).
+      if (result.body && result.body.submission_id && result.body.status === "manual_review") {
+        window.GM5ME = createDeckReporter(result.body.submission_id);
+        showQuoteTransition();
+        openDeck(result.body.submission_id);
+        return;
       }
 
       showQuoteTransition();
@@ -1020,7 +1103,10 @@
       return fetch(ADDRESS_LOOKUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken })
+        body: JSON.stringify(Object.assign(
+          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken },
+          TEST_KEY ? { test_key: TEST_KEY } : {}
+        ))
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1238,8 +1324,8 @@
     return base + (base.indexOf("?") === -1 ? "?" : "&") + qs;
   }
 
-  function openBooking(step, calendarIdOverride) {
-    var key = (leadData && leadData.territory) || FALLBACK_TERRITORY;
+  function openBooking(step, calendarIdOverride, territoryKey) {
+    var key = territoryKey || (leadData && leadData.territory) || FALLBACK_TERRITORY;
     if (!BOOKINGS[key]) key = FALLBACK_TERRITORY;
     var calendarId = calendarIdOverride || BOOKINGS[key][step];
     var url = withPrefill(BOOKING_BASE[key] + calendarId);
