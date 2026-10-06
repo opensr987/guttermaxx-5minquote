@@ -29,6 +29,42 @@
     } catch (e) { return ""; }
   })();
 
+  /* ---------- Meta Pixel (browser half of Conversions API) ----------
+     The worker picks the territory's Pixel and returns its ID + an event_id
+     with quote-start; the browser fires the same Lead with that event_id so
+     Meta counts it once. fbc (ad click) and fbp (browser id) are kept in
+     first-party cookies so the server event matches too. */
+  function readCookie(name) {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  function writeCookie(name, value) {
+    document.cookie = name + "=" + encodeURIComponent(value) + "; Max-Age=7776000; Path=/; SameSite=Lax; Secure";
+  }
+  (function initMetaCookies() {
+    try {
+      var fbclid = new URLSearchParams(window.location.search).get("fbclid");
+      if (fbclid) writeCookie("_fbc", "fb.1." + Date.now() + "." + fbclid);
+      if (!readCookie("_fbp")) writeCookie("_fbp", "fb.1." + Date.now() + "." + Math.floor(Math.random() * 1e10));
+    } catch (e) {}
+  })();
+  function metaTrackLead(pixelId, eventId) {
+    if (!pixelId || !eventId) return;
+    try {
+      if (!window.fbq) {
+        var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!window._fbq) window._fbq = n;
+        n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+        var t = document.createElement("script"); t.async = true;
+        t.src = "https://connect.facebook.net/en_US/fbevents.js";
+        document.head.appendChild(t);
+      }
+      window.fbq("init", String(pixelId));
+      window.fbq("track", "PageView");
+      window.fbq("track", "Lead", {}, { eventID: String(eventId) });
+    } catch (e) { console.error("[meta] pixel failed", e); }
+  }
+
   // Customer deck (built from the reviewed deck; see public/deck/).
   var DECK_URL = "/deck/player.html";
 
@@ -830,6 +866,9 @@
       lead_source: LEAD_SOURCE
     };
     if (TEST_KEY) payload.test_key = TEST_KEY;
+    payload.fbc = readCookie("_fbc") || undefined;
+    payload.fbp = readCookie("_fbp") || undefined;
+    payload.event_source_url = window.location.origin + window.location.pathname;
 
     return fetch(QUOTE_START_URL, {
       method: "POST",
@@ -880,6 +919,7 @@
         });
         activeTracker.start();
         window.GM5ME = createDeckReporter(result.body.submission_id);
+        metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
         showQuoteTransition();
         openDeck(result.body.submission_id);
         return;
@@ -889,6 +929,7 @@
       // the "Submit for Review" screen (window.GM5MEManualReview).
       if (result.body && result.body.submission_id && result.body.status === "manual_review") {
         window.GM5ME = createDeckReporter(result.body.submission_id);
+        metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
         showQuoteTransition();
         openDeck(result.body.submission_id);
         return;
