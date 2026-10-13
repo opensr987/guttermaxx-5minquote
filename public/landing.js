@@ -1156,7 +1156,7 @@
     }).then(function (result) {
       if (!result.ok || result.body.in_service_area === false) {
         var outOfArea = result.status === 422 || result.body.in_service_area === false;
-        var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.body.error || "ADDRESS_LOOKUP_FAILED"));
+        var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.status === 429 ? "RATE_LIMITED" : (result.body.error || "ADDRESS_LOOKUP_FAILED")));
         throw err;
       }
 
@@ -1199,6 +1199,8 @@
       console.error(err);
       if (err && err.message === "OUT_OF_AREA") {
         showCtaError("ctaEstimateError", "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.");
+      } else if (err && err.message === "RATE_LIMITED") {
+        showCtaError("ctaEstimateError", "You\u2019ve reached the limit of instant estimates from this device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.");
       } else {
         showCtaError("ctaEstimateError", "That didn\u2019t go through. Check your connection and try again.");
       }
