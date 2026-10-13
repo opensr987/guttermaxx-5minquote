@@ -849,6 +849,23 @@
   // after a Gate-7 in-place address correction (retry attempt, OTP skipped).
   // Resolves once the outcome (success transition, ATTOM_NOT_FOUND panel,
   // or thrown error) has been handled.
+  /* Plain-language message for every gate / limit / failure, so the
+     visitor always knows what happened and what to do next. */
+  var GATE_MESSAGES = {
+    RATE_LIMITED: "You\u2019ve reached the limit of instant estimates from this device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.",
+    OUT_OF_AREA: "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.",
+    NOT_VERIFIED: "We couldn\u2019t confirm your phone number. Tap \u201cResend code\u201d and enter the newest code.",
+    TURNSTILE: "We couldn\u2019t confirm you\u2019re not a robot. Refresh the page and try again.",
+    OTP_SEND_FAILED: "We couldn\u2019t text a code to that number. Check the number and try again.",
+    QUOTE_START_FAILED: "We couldn\u2019t start your estimate just now. Please try again in a minute, or book a Zoom or In-Home Demo below.",
+    ADDRESS_LOOKUP_FAILED: "We couldn\u2019t look up that address. Check the street and ZIP and try again.",
+    NETWORK: "That didn\u2019t go through. Check your connection and try again."
+  };
+  function gateMessage(err) {
+    var code = err && err.message;
+    return GATE_MESSAGES[code] || GATE_MESSAGES.NETWORK;
+  }
+
   function runQuoteStart() {
     if (!pendingRequest || !leadData) return Promise.reject(new Error("MISSING_STATE"));
 
@@ -876,7 +893,7 @@
       body: JSON.stringify(payload)
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-        return { ok: res.ok, body: body };
+        return { ok: res.ok, status: res.status, body: body };
       });
     }).then(function (result) {
       if (result.body && result.body.error === "ATTOM_NOT_FOUND") {
@@ -894,7 +911,12 @@
       }
 
       if (!result.ok) {
-        throw new Error((result.body && result.body.error) || "QUOTE_START_FAILED");
+        throw new Error(
+          result.status === 429 ? "RATE_LIMITED" :
+          result.status === 422 ? "OUT_OF_AREA" :
+          result.status === 403 ? "NOT_VERIFIED" :
+          "QUOTE_START_FAILED"
+        );
       }
 
       attomRetry = null;
@@ -1156,7 +1178,7 @@
     }).then(function (result) {
       if (!result.ok || result.body.in_service_area === false) {
         var outOfArea = result.status === 422 || result.body.in_service_area === false;
-        var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.status === 429 ? "RATE_LIMITED" : (result.body.error || "ADDRESS_LOOKUP_FAILED")));
+        var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "ADDRESS_LOOKUP_FAILED")));
         throw err;
       }
 
@@ -1186,24 +1208,18 @@
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-        return { ok: res.ok, body: body };
+        return { ok: res.ok, status: res.status, body: body };
       });
     }).then(function (result) {
       if (!result.ok || !result.body.sent) {
-        throw new Error((result.body && result.body.error) || "OTP_SEND_FAILED");
+        throw new Error(result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED");
       }
       setBtnLoading(btn, false);
       openOtpModal();
     }).catch(function (err) {
       setBtnLoading(btn, false);
       console.error(err);
-      if (err && err.message === "OUT_OF_AREA") {
-        showCtaError("ctaEstimateError", "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.");
-      } else if (err && err.message === "RATE_LIMITED") {
-        showCtaError("ctaEstimateError", "You\u2019ve reached the limit of instant estimates from this device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.");
-      } else {
-        showCtaError("ctaEstimateError", "That didn\u2019t go through. Check your connection and try again.");
-      }
+      showCtaError("ctaEstimateError", gateMessage(err));
     });
   });
 
@@ -1503,7 +1519,9 @@
     }).catch(function (err) {
       console.error(err);
       setBtnLoading(otpVerifyBtn, false);
-      showOtpError("That didn't go through. Check your connection and try again.");
+      var msg = gateMessage(err);
+      showOtpError(msg);
+      showCtaError("ctaEstimateError", msg);
     });
   });
 
