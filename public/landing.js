@@ -1479,7 +1479,14 @@
     }).then(function (result) {
       if (!result.ok || !result.body.verified) {
         setBtnLoading(otpVerifyBtn, false);
-        showOtpError("That code didn't match. Check it and try again, or resend.");
+        if (result.body && result.body.needs_new_code) {
+          otpCode.value = "";
+          showOtpError("That code is no longer active. Tap \u201cResend code\u201d for a new one.");
+        } else if (!result.ok) {
+          showOtpError("We couldn't check that code. Tap \u201cResend code\u201d for a new one.");
+        } else {
+          showOtpError("That code didn't match. Check it and try again, or tap \u201cResend code\u201d.");
+        }
         otpCode.focus();
         return;
       }
@@ -1517,11 +1524,17 @@
     }).then(function (result) {
       otpResend.disabled = false;
       otpResend.textContent = original;
-      showOtpError(result.ok && result.body.sent ? "" : "Couldn't resend. Try again in a moment.");
+      if (result.ok && result.body.sent) {
+        otpCode.value = "";
+        showOtpError("New code sent. Use the newest text.");
+        otpCode.focus();
+      } else {
+        showOtpError("Couldn't send a new code. Check your connection and tap \u201cResend code\u201d again.");
+      }
     }).catch(function () {
       otpResend.disabled = false;
       otpResend.textContent = original;
-      showOtpError("Couldn't resend. Try again in a moment.");
+      showOtpError("Couldn't send a new code. Check your connection and tap \u201cResend code\u201d again.");
     });
   });
 
