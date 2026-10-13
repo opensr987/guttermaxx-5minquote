@@ -369,6 +369,17 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .cta-card:not(.cta-primary) .cta-btn{margin-top:clamp(6px,1.2vh,10px) !important}
   .cta-stack{padding-bottom:12px}
 }
+/* 5-Minute Estimate title: 2 rows on every screen.
+   Desktop: "...GutterMaxx Estimate" / "In Under 5 Minutes!"
+   Phones:  "...GutterMaxx" / "Estimate In Under 5 Minutes!" */
+.cta-est-title .m-only{display:none}
+.cta-est-title .l1,.cta-est-title .l2{white-space:nowrap}
+@media(max-width:900px){
+  .cta-est-title .d-only{display:none}
+  .cta-est-title .m-only{display:inline}
+  .cta-primary h3.cta-est-title{font-size:clamp(12px,4.3vw,17px) !important}
+}
+
 /* Button label + arrow sit together in the middle; the arrow no longer rides the border. */
 .cta-btn-label{flex:0 1 auto}
 .cta-btn{padding:0 18px}
