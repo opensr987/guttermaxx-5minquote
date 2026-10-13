@@ -355,6 +355,24 @@ label{font-size:clamp(10px,1.15vh,11.5px) !important;margin-bottom:clamp(2px,0.5
   .footer-trustbar{gap:6px !important}
 }
 
+/* Phones: the 3-CTA stack (form + 5-Minute Estimate + Zoom + In-Home Demo)
+   is taller than one phone screen, so the one-viewport lock above clipped
+   the bottom with no way to scroll. On phones the page scrolls normally.
+   No !important on overflow so body.deck-open and the inline scroll lock
+   the deck sets still win while the deck is open. */
+@media(max-width:900px){
+  html,body{height:auto;overflow:visible;overflow-x:hidden}
+  body>div{height:auto !important;overflow:visible !important}
+  main#main{overflow:visible !important;justify-content:flex-start !important}
+  /* Zoom / In-Home cards get their photo + title back (same look as desktop and the deck). */
+  .cta-card:not(.cta-primary) .cta-head{display:flex !important}
+  .cta-card:not(.cta-primary) .cta-btn{margin-top:clamp(6px,1.2vh,10px) !important}
+  .cta-stack{padding-bottom:12px}
+}
+/* Button label + arrow sit together in the middle; the arrow no longer rides the border. */
+.cta-btn-label{flex:0 1 auto}
+.cta-btn{padding:0 18px}
+
 /* ---------- 4. HERO ---------- */
 .hero{
   position:relative;overflow:hidden;
