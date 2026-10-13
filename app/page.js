@@ -930,7 +930,7 @@ const BODY_HTML = `
         <div class="cta-kicker">Fastest option</div>
         <div class="cta-head">
           <img class="cta-avatar" src="assets/cta-woman-phone.jpg" alt="" aria-hidden="true">
-          <h3>Get Your Home&rsquo;s GutterMaxx Estimate<br>In Under 5 Minutes!</h3>
+          <h3 class="cta-est-title"><span class="l1">Get Your Home&rsquo;s GutterMaxx<span class="d-only"> Estimate</span></span><br><span class="l2"><span class="m-only">Estimate </span>In Under 5 Minutes!</span></h3>
         </div>
         <p>We&rsquo;ll text you a verification code, then price your gutters in real time.</p>
         <button type="submit" form="assessmentForm" class="cta-btn cta-btn-primary" id="ctaEstimate" data-step="quote-5-min">
