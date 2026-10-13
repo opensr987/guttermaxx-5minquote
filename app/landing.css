@@ -996,3 +996,10 @@ footer{background:#0b100d;color:#fff;padding-top:68px}
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
   .reveal{opacity:1;transform:none}
 }
+
+/* Customer deck overlay (3-CTA 5-Minute Estimate). Sits under the booking
+   modal (z 300) so the deck's Zoom / In-Home Demo buttons open on top. */
+.deck-overlay{position:fixed;inset:0;z-index:250;background:#fff}
+.deck-overlay iframe{display:block;width:100%;height:100%;border:0}
+body.deck-open{overflow:hidden}
+body.deck-open #mobileCta{display:none!important}

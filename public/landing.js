@@ -15,6 +15,58 @@
   var QUOTE_START_URL    = WORKER_BASE + "/api/quote-start";
   var QUOTE_STATUS_URL   = WORKER_BASE + "/api/quote-status";
   var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
+  var QUOTE_VIEWED_URL   = WORKER_BASE + "/api/quote-viewed";
+
+  // Pre-launch / QA only: ?testkey=... on the page URL is remembered for
+  // this tab and sent to address-lookup + quote-start, where the worker
+  // skips the 2-per-6-months limit ONLY if it exactly matches the
+  // RATE_LIMIT_TEST_KEY env var (unset = no effect). Customers never have it.
+  var TEST_KEY = (function () {
+    try {
+      var k = new URLSearchParams(window.location.search).get("testkey");
+      if (k) sessionStorage.setItem("gm_testkey", k);
+      return sessionStorage.getItem("gm_testkey") || "";
+    } catch (e) { return ""; }
+  })();
+
+  /* ---------- Meta Pixel (browser half of Conversions API) ----------
+     The worker picks the territory's Pixel and returns its ID + an event_id
+     with quote-start; the browser fires the same Lead with that event_id so
+     Meta counts it once. fbc (ad click) and fbp (browser id) are kept in
+     first-party cookies so the server event matches too. */
+  function readCookie(name) {
+    var m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+    return m ? decodeURIComponent(m[1]) : "";
+  }
+  function writeCookie(name, value) {
+    document.cookie = name + "=" + encodeURIComponent(value) + "; Max-Age=7776000; Path=/; SameSite=Lax; Secure";
+  }
+  (function initMetaCookies() {
+    try {
+      var fbclid = new URLSearchParams(window.location.search).get("fbclid");
+      if (fbclid) writeCookie("_fbc", "fb.1." + Date.now() + "." + fbclid);
+      if (!readCookie("_fbp")) writeCookie("_fbp", "fb.1." + Date.now() + "." + Math.floor(Math.random() * 1e10));
+    } catch (e) {}
+  })();
+  function metaTrackLead(pixelId, eventId) {
+    if (!pixelId || !eventId) return;
+    try {
+      if (!window.fbq) {
+        var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+        if (!window._fbq) window._fbq = n;
+        n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+        var t = document.createElement("script"); t.async = true;
+        t.src = "https://connect.facebook.net/en_US/fbevents.js";
+        document.head.appendChild(t);
+      }
+      window.fbq("init", String(pixelId));
+      window.fbq("track", "PageView");
+      window.fbq("track", "Lead", {}, { eventID: String(eventId) });
+    } catch (e) { console.error("[meta] pixel failed", e); }
+  }
+
+  // Customer deck (built from the reviewed deck; see public/deck/).
+  var DECK_URL = "/deck/player.html";
 
   // Cloudflare Turnstile — invisible bot check. Site key is public by
   // design (safe to ship in client code); the paired secret key lives only
@@ -578,6 +630,63 @@
   //   activeTracker.start();   // begins polling
   //   activeTracker.stop();    // call when the deck navigates away
   // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Deck -> worker bridge (5ME). The slide deck calls ONLY this; it never
+  // builds its own requests. Bound to this tab's own submission_id (same
+  // guarantee as the tracker above). The worker moves the GHL opportunity
+  // forward-only and fills the 5ME fields, so repeats are harmless; the
+  // dedupe here just avoids needless traffic.
+  //
+  //   GM5ME.priceShown()                 Price Rollout rendered with the real number
+  //   GM5ME.action("price_locked")       Lock In My Price
+  //   GM5ME.action("financing_started")  Qualify for Payments
+  //   GM5ME.action("savings_inquiry")    Click to Call card
+  //   GM5ME.callMeNow(["senior", ...], otherText)   Call Me Now! on Check Qualifying Discounts
+  //     (otherText = customer's 15-char note when "other" is picked)
+  // ---------------------------------------------------------------------
+  var DECK_ACTIONS = ["price_viewed", "price_locked", "financing_started", "savings_inquiry"];
+  var DISCOUNT_IDS = ["senior", "military", "first-responder", "teacher-healthcare", "neighbor-referral", "pay-in-full", "other"];
+
+  function createDeckReporter(submissionId) {
+    var sent = {};
+    function post(body, key) {
+      if (sent[key]) return Promise.resolve({ skipped: true });
+      sent[key] = true;
+      return fetch(QUOTE_VIEWED_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ submission_id: submissionId }, body)),
+        keepalive: true // finishes even if the click opens tel: or leaves the page
+      }).then(function (res) {
+        if (!res.ok) sent[key] = false; // allow a later retry
+        return res.json().catch(function () { return null; });
+      }).catch(function (err) {
+        sent[key] = false;
+        console.error("[GM5ME] report failed", body.action, err);
+        return null;
+      });
+    }
+    function action(name) {
+      if (DECK_ACTIONS.indexOf(name) === -1) return Promise.resolve({ skipped: true, reason: "unknown_action" });
+      return post({ action: name }, name);
+    }
+    function callMeNow(discounts, otherText) {
+      var picked = (Array.isArray(discounts) ? discounts : []).map(function (d) { return String(d).toLowerCase(); })
+        .filter(function (d, i, a) { return DISCOUNT_IDS.indexOf(d) !== -1 && a.indexOf(d) === i; })
+        .sort(function (a, b) { return DISCOUNT_IDS.indexOf(a) - DISCOUNT_IDS.indexOf(b); });
+      var body = { action: "savings_inquiry", callback: true, discounts: picked };
+      var other = picked.indexOf("other") !== -1 ? String(otherText || "").replace(/\s+/g, " ").trim().slice(0, 15) : "";
+      if (other) body.discount_other = other;
+      return post(body, "callme:" + picked.join(",") + (other ? "|" + other : ""));
+    }
+    return {
+      submissionId: submissionId,
+      priceShown: function () { return action("price_viewed"); },
+      action: action,
+      callMeNow: callMeNow
+    };
+  }
+
   function createSubmissionTracker(submissionId, onUpdate) {
     var POLL_MS = 3000;
     var MAX_WAIT_MS = 120000; // stop polling after 2 minutes either way
@@ -633,6 +742,61 @@
       getLastStatus: function () { return lastStatus; },
     };
   }
+
+  /* ---------- Customer deck: full-window overlay for this tab's submission ---------- */
+  function openDeck(submissionId) {
+    var existing = $("#deckOverlay");
+    if (existing) existing.parentNode.removeChild(existing);
+    var addr = (pendingRequest && pendingRequest.formatted_address) || (leadData && leadData.address) || "";
+    addr = String(addr).replace(/,\s*USA$/, "");
+    var overlay = document.createElement("div");
+    overlay.id = "deckOverlay";
+    overlay.className = "deck-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", "Your GutterMaxx estimate");
+    var frame = document.createElement("iframe");
+    frame.id = "deckFrame";
+    frame.title = "Your GutterMaxx estimate";
+    frame.setAttribute("allow", "autoplay; fullscreen");
+    frame.src = DECK_URL + "?sid=" + encodeURIComponent(submissionId) + (addr ? "&addr=" + encodeURIComponent(addr) : "");
+    overlay.appendChild(frame);
+    document.body.appendChild(overlay);
+    document.body.classList.add("deck-open");
+    try { frame.focus(); } catch (e) {}
+  }
+
+  // Deck -> page bridges (the deck runs in a same-origin iframe).
+  // Booking: same GHL calendars as the landing-page Zoom / In-Home Demo CTAs,
+  // routed by the customer's ZIP.
+  window.GM5MEBook = function (step) {
+    if (step !== "virtual-15-min" && step !== "in-home-demo") return;
+    openBooking(step, null, territoryFor(leadData && leadData.zip));
+  };
+  // MANUAL_REVIEW screen's "Submit for Review" -> ManualReview@ alias.
+  window.GM5MEManualReview = function () {
+    var sid = window.GM5ME && window.GM5ME.submissionId;
+    return getTurnstileToken().then(function (turnstileToken) {
+      return fetch(MANUAL_REVIEW_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outcome: "MANUAL_REVIEW",
+          request_id: pendingRequest && pendingRequest.request_id,
+          submission_id: sid,
+          first_name: leadData && leadData.first_name,
+          last_name: leadData && leadData.last_name,
+          phone: leadData && leadData.phone,
+          email: leadData && leadData.email,
+          address: leadData && leadData.address,
+          zip: leadData && leadData.zip,
+          territory: leadData && leadData.territory,
+          turnstile_token: turnstileToken
+        })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) { return Boolean(res.ok && body && body.ok); });
+    }).catch(function (err) { console.error(err); return false; });
+  };
 
   function showQuoteTransition() {
     formContainer.classList.add("hide");
@@ -701,6 +865,10 @@
       email: leadData.email,
       lead_source: LEAD_SOURCE
     };
+    if (TEST_KEY) payload.test_key = TEST_KEY;
+    payload.fbc = readCookie("_fbc") || undefined;
+    payload.fbp = readCookie("_fbp") || undefined;
+    payload.event_source_url = window.location.origin + window.location.pathname;
 
     return fetch(QUOTE_START_URL, {
       method: "POST",
@@ -743,22 +911,28 @@
       if (activeTracker) { activeTracker.stop(); }
       if (result.body && result.body.submission_id && result.body.status === "processing") {
         activeTracker = createSubmissionTracker(result.body.submission_id, function (status) {
-          // Placeholder hook — the slide deck (Slides 2-5, not yet built)
-          // reads canopy_status/measurement_status here to decide Path A
-          // vs Path B. Logged for now so real production polling can be
-          // verified end to end before the deck consumes it.
-          //
-          // IMPORTANT for whoever builds the deck: the instant the deck
-          // renders its LAST slide in front of the customer (real number
-          // shown, not just "ready on the backend"), call:
-          //   POST /api/quote-viewed  body: { submission_id }
-          // That call (not this status poll) is what moves the GHL
-          // opportunity to "5 Minute Estimate". Fire it exactly once, at
-          // that visual moment — the endpoint is idempotent so an extra
-          // call is harmless, but it must not fire earlier than this.
+          // The slide deck reads canopy_status/measurement_status here to
+          // pick its path. Price/click reporting goes through window.GM5ME
+          // (createDeckReporter above): call GM5ME.priceShown() the instant
+          // the real price is on screen — never earlier.
           console.log("[submissionTracker] status update", status.submission_id, status.canopy_status, status.measurement_status);
         });
         activeTracker.start();
+        window.GM5ME = createDeckReporter(result.body.submission_id);
+        metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
+        showQuoteTransition();
+        openDeck(result.body.submission_id);
+        return;
+      }
+      // Gate 6 manual review: the deck still plays its opening, then
+      // quote-status hands back MANUAL_REVIEW at the fork and the deck shows
+      // the "Submit for Review" screen (window.GM5MEManualReview).
+      if (result.body && result.body.submission_id && result.body.status === "manual_review") {
+        window.GM5ME = createDeckReporter(result.body.submission_id);
+        metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
+        showQuoteTransition();
+        openDeck(result.body.submission_id);
+        return;
       }
 
       showQuoteTransition();
@@ -970,7 +1144,10 @@
       return fetch(ADDRESS_LOOKUP_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken })
+        body: JSON.stringify(Object.assign(
+          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken },
+          TEST_KEY ? { test_key: TEST_KEY } : {}
+        ))
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1188,8 +1365,8 @@
     return base + (base.indexOf("?") === -1 ? "?" : "&") + qs;
   }
 
-  function openBooking(step, calendarIdOverride) {
-    var key = (leadData && leadData.territory) || FALLBACK_TERRITORY;
+  function openBooking(step, calendarIdOverride, territoryKey) {
+    var key = territoryKey || (leadData && leadData.territory) || FALLBACK_TERRITORY;
     if (!BOOKINGS[key]) key = FALLBACK_TERRITORY;
     var calendarId = calendarIdOverride || BOOKINGS[key][step];
     var url = withPrefill(BOOKING_BASE[key] + calendarId);
