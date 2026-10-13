@@ -852,7 +852,7 @@
   /* Plain-language message for every gate / limit / failure, so the
      visitor always knows what happened and what to do next. */
   var GATE_MESSAGES = {
-    RATE_LIMITED: "You\u2019ve reached the limit of instant estimates from this device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.",
+    RATE_LIMITED: "You\u2019ve reached the limit of instant estimates for this phone number or device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.",
     OUT_OF_AREA: "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.",
     NOT_VERIFIED: "We couldn\u2019t confirm your phone number. Tap \u201cResend code\u201d and enter the newest code.",
     TURNSTILE: "We couldn\u2019t confirm you\u2019re not a robot. Refresh the page and try again.",
@@ -1212,7 +1212,7 @@
       });
     }).then(function (result) {
       if (!result.ok || !result.body.sent) {
-        throw new Error(result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED");
+        throw new Error(result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED"));
       }
       setBtnLoading(btn, false);
       openOtpModal();
@@ -1539,7 +1539,7 @@
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
-        return { ok: res.ok, body: body };
+        return { ok: res.ok, status: res.status, body: body };
       });
     }).then(function (result) {
       otpResend.disabled = false;
@@ -1548,6 +1548,8 @@
         otpCode.value = "";
         showOtpError("New code sent. Use the newest text.");
         otpCode.focus();
+      } else if (result.status === 429) {
+        showOtpError(gateMessage(new Error("RATE_LIMITED")));
       } else {
         showOtpError("Couldn't send a new code. Check your connection and tap \u201cResend code\u201d again.");
       }
