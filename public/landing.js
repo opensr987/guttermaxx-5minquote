@@ -447,6 +447,59 @@
     zip.value = zip.value.replace(/\D/g, "").slice(0, 5);
   });
 
+  /* =====================================================
+     ONLINE-QUOTE INVITE (old-prospect campaign)
+     go.guttermaxx.com/?i=CODE prefills the form from the person's
+     existing GHL contact. They still confirm the checkboxes and go
+     through every gate like ad traffic. Their in-home calendar is the
+     one they originally came through; Zoom is the 5ME/landing Zoom.
+     Normal visitors (no ?i=) are unaffected.
+  ===================================================== */
+  var INVITE = null;
+  var INVITE_CODE = (function () {
+    try {
+      var c = new URLSearchParams(window.location.search).get("i") || "";
+      return /^[A-Za-z0-9]{10}$/.test(c) ? c : "";
+    } catch (e) { return ""; }
+  })();
+  if (INVITE_CODE) {
+    fetch(WORKER_BASE + "/api/invite?c=" + encodeURIComponent(INVITE_CODE))
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok) { INVITE_CODE = ""; return; }
+        INVITE = data;
+        if (data.lead_source) LEAD_SOURCE = data.lead_source;
+        var phoneDigits = String(data.phone || "").replace(/\D/g, "");
+        var addr = String(data.address || "");
+        if (addr && data.city && addr.toLowerCase().indexOf(String(data.city).toLowerCase()) === -1) addr = addr + ", " + data.city;
+        var fill = { first_name: data.first_name, last_name: data.last_name, phone: phoneDigits, email: data.email, address: addr, zip: data.zip };
+        Object.keys(fill).forEach(function (id) {
+          var el = document.getElementById(id);
+          if (!el || !fill[id] || el.value) return;
+          el.value = fill[id];
+          el.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+        var note = document.createElement("p");
+        note.id = "inviteWelcome";
+        note.setAttribute("role", "status");
+        note.style.cssText = "margin:0 0 14px;padding:12px 14px;border-radius:10px;background:#eaf5ee;color:#0d2f21;font-size:15px;line-height:1.45;font-weight:600;";
+        note.textContent = "Welcome back" + (data.first_name ? ", " + data.first_name : "") + "! We filled in your info from before. Check it, tick the 2 boxes, and tap GET ESTIMATE.";
+        if (form) form.insertBefore(note, form.firstChild);
+        window.setTimeout(function () {
+          var card = form && (form.closest(".form-card") || form);
+          if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 400);
+      })
+      .catch(function () { INVITE_CODE = ""; });
+  }
+  // Invite applies only while the address stays in the invite's territory.
+  function activeInvite() {
+    if (!INVITE) return null;
+    var t = leadData && leadData.zip ? territoryFor(leadData.zip) : null;
+    if (t && t !== INVITE.territory) return null;
+    return INVITE;
+  }
+
   function showError(field, show) {
     var msg = $('.error[data-for="' + field.id + '"]');
     field.classList.toggle("invalid", show);
@@ -591,7 +644,7 @@
       return fetch(LEAD_CAPTURE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({}, payload, { turnstile_token: token }))
+        body: JSON.stringify(Object.assign({}, payload, { turnstile_token: token }, INVITE_CODE ? { invite_code: INVITE_CODE } : {}))
       });
     });
   }
@@ -790,6 +843,7 @@
           address: leadData && leadData.address,
           zip: leadData && leadData.zip,
           territory: leadData && leadData.territory,
+          invite_code: INVITE_CODE || undefined,
           turnstile_token: turnstileToken
         })
       });
@@ -883,6 +937,7 @@
       lead_source: LEAD_SOURCE
     };
     if (TEST_KEY) payload.test_key = TEST_KEY;
+    if (INVITE_CODE) payload.invite_code = INVITE_CODE;
     payload.fbc = readCookie("_fbc") || undefined;
     payload.fbp = readCookie("_fbp") || undefined;
     payload.event_source_url = window.location.origin + window.location.pathname;
@@ -1386,6 +1441,11 @@
   function openBooking(step, calendarIdOverride, territoryKey) {
     var key = territoryKey || (leadData && leadData.territory) || FALLBACK_TERRITORY;
     if (!BOOKINGS[key]) key = FALLBACK_TERRITORY;
+    var inv = activeInvite();
+    if (inv && BOOKINGS[inv.territory]) {
+      key = inv.territory;
+      calendarIdOverride = step === "in-home-demo" ? inv.demo_calendar_id : inv.zoom_calendar_id;
+    }
     var calendarId = calendarIdOverride || BOOKINGS[key][step];
     var url = withPrefill(BOOKING_BASE[key] + calendarId);
 
@@ -1595,6 +1655,7 @@
           address: leadData && leadData.address,
           zip: leadData && leadData.zip,
           territory: leadData && leadData.territory,
+          invite_code: INVITE_CODE || undefined,
           turnstile_token: turnstileToken
         })
       });
