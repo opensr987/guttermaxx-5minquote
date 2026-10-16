@@ -1019,22 +1019,6 @@
 
   /* ---------- device fingerprint (FingerprintJS, with a light fallback) ---------- */
   function fallbackFingerprint() {
-    // A random ID saved on this device. (The old fallback hashed phone model +
-    // screen + language, so two strangers with the same phone could share it.)
-    try {
-      var saved = window.localStorage && localStorage.getItem("gm_device_id");
-      if (saved && /^fallback-[a-z0-9]{8,40}$/.test(saved)) return saved;
-      var rnd = "";
-      if (window.crypto && crypto.getRandomValues) {
-        var a = new Uint32Array(4); crypto.getRandomValues(a);
-        for (var k = 0; k < a.length; k++) rnd += a[k].toString(36);
-      } else {
-        rnd = Math.random().toString(36).slice(2) + Date.now().toString(36);
-      }
-      var id = "fallback-" + rnd.slice(0, 24);
-      if (window.localStorage) localStorage.setItem("gm_device_id", id);
-      return id;
-    } catch (e) { /* storage blocked: fall through to the old hash */ }
     try {
       var raw = [
         navigator.userAgent, navigator.language,
@@ -1282,12 +1266,6 @@
         return { ok: res.ok, status: res.status, body: body };
       });
     }).then(function (result) {
-      // Silent check passed on the server (real mobile number, nothing off):
-      // no code needed — go straight to the estimate.
-      if (result.ok && result.body.verified === true) {
-        setBtnLoading(btn, true, "Getting your estimate\u2026");
-        return runQuoteStart().then(function () { setBtnLoading(btn, false); });
-      }
       if (!result.ok || !result.body.sent) {
         throw new Error(result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED"));
       }
@@ -1617,7 +1595,7 @@
       return fetch(OTP_SEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, force_code: true })
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
