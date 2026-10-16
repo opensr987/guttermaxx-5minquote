@@ -1685,6 +1685,140 @@
 
 
   /* =====================================================
+     FACEBOOK INSTANT FORM -> 5ME (Oct 16 2026, 2nd FB campaign)
+     ?fb=CODE   personal link texted after the Meta form. Starts the
+                deck right away: /api/fb-start (gate + verified request,
+                no text code: Meta verified the phone and the link went
+                to it) then the normal runQuoteStart() -> Vexcel -> deck.
+     ?fb=thanks the Meta form's thank-you button: "check your texts",
+                plus "text me my link again".
+     Normal visitors (no ?fb=) are unaffected.
+  ===================================================== */
+  (function facebookInstantForm() {
+    var fbParam = "";
+    try { fbParam = new URLSearchParams(window.location.search).get("fb") || ""; } catch (e) {}
+    var isThanks = fbParam === "thanks";
+    var fbCode = /^[A-Za-z0-9]{12}$/.test(fbParam) ? fbParam : "";
+    if (!isThanks && !fbCode) return;
+
+    var card = form && (form.closest(".form-card") || form.parentNode);
+    if (!card) return;
+    var panel = document.createElement("div");
+    panel.id = "fbPanel";
+    panel.setAttribute("role", "status");
+    panel.style.cssText = "padding:6px 2px 4px;text-align:center;";
+    card.insertBefore(panel, card.firstChild);
+    if (formContainer) formContainer.classList.add("hide");
+
+    function esc(t) { return String(t || "").replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+    function show(title, body) {
+      panel.innerHTML = '<h3 style="margin:8px 0 10px;font-size:22px;line-height:1.25">' + title + '</h3>' + (body || "");
+      panel.scrollIntoView({ block: "center" });
+    }
+    function callLine(digits, display) {
+      return digits ? '<p style="margin:14px 0 0"><a class="cta-btn cta-btn-primary" style="text-decoration:none" href="tel:+1' + esc(digits) + '">Call ' + esc(display || "us") + '</a></p>' : "";
+    }
+
+    if (isThanks) {
+      show("You&rsquo;re all set!",
+        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">We just texted you a personal link to start your <b>GutterMaxx 5-Minute Estimate</b>. Open your texts and tap the link.</p>' +
+        '<p style="margin:18px 0 6px;font-size:14px;font-weight:700;color:#5f6a63">Didn&rsquo;t get it?</p>' +
+        '<input type="tel" id="fbResendPhone" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" style="width:100%;max-width:320px;height:46px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:16px">' +
+        '<p style="margin:10px 0 0"><button type="button" class="cta-btn cta-btn-secondary" id="fbResendBtn" style="max-width:320px">Text me my link</button></p>' +
+        '<p id="fbResendMsg" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
+      var btn = $("#fbResendBtn");
+      btn.addEventListener("click", function () {
+        var digits = String($("#fbResendPhone").value || "").replace(/\D/g, "");
+        if (digits.length < 10) { $("#fbResendMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        setBtnLoading(btn, true, "Sending\u2026");
+        getTurnstileToken().then(function (token) {
+          return fetch(WORKER_BASE + "/api/fb-resend", {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ phone: digits, turnstile_token: token })
+          });
+        }).then(function () {
+          setBtnLoading(btn, false);
+          $("#fbResendMsg").textContent = "If that number just filled out our form, your link is on its way. It can take a minute.";
+        }).catch(function () {
+          setBtnLoading(btn, false);
+          $("#fbResendMsg").textContent = "That didn\u2019t go through. Check your connection and try again.";
+        });
+      });
+      return;
+    }
+
+    show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+      '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
+
+    Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
+      return fetch(WORKER_BASE + "/api/fb-start", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.assign({ code: fbCode, device_fingerprint: r[0], turnstile_token: r[1] }, TEST_KEY ? { test_key: TEST_KEY } : {}))
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
+    }).then(function (r) {
+      var b = r.body || {};
+      if (!r.ok || !b.ok) {
+        if (b.error === "RATE_LIMITED") {
+          show("You&rsquo;ve reached the limit of instant estimates", '<p style="margin:0;font-size:15px;line-height:1.5">This phone number or device has already had its 2 free instant estimates. Give us a call and we&rsquo;ll price it for you.</p>' + callLine(b.phone_digits, b.phone_display));
+        } else if (b.error === "NEEDS_HELP") {
+          show("We need a hand with your property details", '<p style="margin:0;font-size:15px;line-height:1.5">We couldn&rsquo;t verify this property online. Give us a call and we&rsquo;ll finish your estimate with you.</p>' + callLine(b.phone_digits, b.phone_display));
+        } else if (b.error === "LINK_EXPIRED" || b.error === "LINK_NOT_FOUND") {
+          show("This link has expired", '<p style="margin:0;font-size:15px;line-height:1.5">No problem. Fill out the form below and we&rsquo;ll start your estimate.</p>');
+          if (formContainer) formContainer.classList.remove("hide");
+        } else {
+          show("That didn&rsquo;t go through", '<p style="margin:0;font-size:15px;line-height:1.5">Please refresh this page to try again.</p>');
+        }
+        return;
+      }
+
+      // Same state the website form builds, so quote-start, the deck, the
+      // ATTOM retry panel and the deck's booking buttons all work unchanged.
+      LEAD_SOURCE = "facebook";
+      var digits = String(b.phone_e164 || "").replace(/\D/g, "").slice(-10);
+      leadData = {
+        first_name: b.first_name, last_name: b.last_name, phone: digits, email: b.email,
+        address: b.street, zip: b.zip, color_preference: "",
+        territory: b.territory || territoryFor(b.zip) || FALLBACK_TERRITORY,
+        source: "Facebook Instant Form", lead_source: "facebook", submitted_at: new Date().toISOString()
+      };
+      pendingRequest = {
+        request_id: b.request_id, territory: b.territory, zip: b.zip, address_key: b.address_key,
+        formatted_address: b.formatted_address, lat: b.lat, lng: b.lng
+      };
+      // Pre-fill the (hidden) form so an address correction is possible if
+      // the property check asks for one.
+      var fill = { first_name: b.first_name, last_name: b.last_name, phone: digits, email: b.email, address: b.street, zip: b.zip };
+      Object.keys(fill).forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el && fill[id]) { el.value = fill[id]; el.dispatchEvent(new Event("input", { bubbles: true })); }
+      });
+      ["consent", "homeownerCertify"].forEach(function (id) { var el = document.getElementById(id); if (el) el.checked = true; });
+
+      if (b.resume && b.submission_id) {
+        if (activeTracker) activeTracker.stop();
+        activeTracker = createSubmissionTracker(b.submission_id, function () {});
+        activeTracker.start();
+        window.GM5ME = createDeckReporter(b.submission_id);
+        panel.innerHTML = "";
+        showQuoteTransition();
+        openDeck(b.submission_id);
+        return;
+      }
+
+      return runQuoteStart().then(function () {
+        panel.innerHTML = "";
+        if (attomRetry && formContainer) formContainer.classList.remove("hide");
+      });
+    }).catch(function (err) {
+      console.error(err);
+      show("That didn&rsquo;t go through", '<p style="margin:0;font-size:15px;line-height:1.5">' + esc(gateMessage(err)) + '</p>');
+    });
+  })();
+
+
+  /* =====================================================
      MISC
   ===================================================== */
   $("#year").textContent = new Date().getFullYear();
