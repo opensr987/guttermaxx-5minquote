@@ -1033,3 +1033,23 @@ footer{background:#0b100d;color:#fff;padding-top:68px}
 .deck-overlay iframe{display:block;width:100%;height:100%;border:0}
 body.deck-open{overflow:hidden}
 body.deck-open #mobileCta{display:none!important}
+
+/* One-CTA front page (Oct 16 2026): GET MY ESTIMATE sits at the end of the
+   form. Zoom / In-Home Demo appear only from the Price Rollout slide on. */
+.form-cta{margin-top:clamp(10px,1.6vh,18px)}
+.form-cta .cta-btn{margin-top:0 !important}
+.form-cta-note{margin:8px 0 0;text-align:center;color:var(--muted);font-size:12.5px;font-weight:700;line-height:1.35}
+.form-cta .cta-error.show{display:block !important;text-align:center}
+.assessment-grid:has(.right-col .mini-compare){align-items:start}
+@media (max-width:900px){
+  .form-cta-note{font-size:11.5px;margin-top:6px}
+  .form-cta .cta-trust-chip{display:flex !important}
+}
+.front-pitch{background:#fff;border:1px solid rgba(0,0,0,.06);border-radius:22px;padding:22px 22px 18px;box-shadow:0 18px 40px rgba(20,40,30,.08)}
+.front-pitch .cta-head{display:flex;align-items:center;gap:12px;margin-top:8px}
+.front-pitch h3{font-size:20px;line-height:1.2;margin:0}
+.front-pitch-list{list-style:none;margin:14px 0 0;padding:0;display:grid;gap:8px}
+.front-pitch-list li{position:relative;padding-left:24px;font-size:13.5px;font-weight:700;color:var(--muted);line-height:1.35}
+.front-pitch-list li::before{content:"\2713";position:absolute;left:0;top:0;color:var(--green);font-weight:900}
+.right-col:has(.front-pitch){align-self:start}
+@media (max-width:900px){ .front-pitch{display:none !important} }
