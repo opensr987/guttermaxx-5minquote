@@ -906,17 +906,26 @@
   /* Plain-language message for every gate / limit / failure, so the
      visitor always knows what happened and what to do next. */
   var GATE_MESSAGES = {
-    RATE_LIMITED: "You\u2019ve reached the limit of instant estimates for this phone number or device. Book a Zoom or In-Home Demo below and we\u2019ll price it for you.",
+    RATE_LIMITED: "You\u2019ve reached the limit of instant estimates for this phone number or device. Give us a call and we\u2019ll price it for you.",
     OUT_OF_AREA: "That address is outside our current service area right now \u2014 we\u2019ll still reach out to see how we can help.",
     NOT_VERIFIED: "We couldn\u2019t confirm your phone number. Tap \u201cResend code\u201d and enter the newest code.",
     TURNSTILE: "We couldn\u2019t confirm you\u2019re not a robot. Refresh the page and try again.",
     OTP_SEND_FAILED: "We couldn\u2019t text a code to that number. Check the number and try again.",
-    QUOTE_START_FAILED: "We couldn\u2019t start your estimate just now. Please try again in a minute, or book a Zoom or In-Home Demo below.",
+    QUOTE_START_FAILED: "We couldn\u2019t start your estimate just now. Please try again in a minute.",
     ADDRESS_LOOKUP_FAILED: "We couldn\u2019t look up that address. Check the street and ZIP and try again.",
     NETWORK: "That didn\u2019t go through. Check your connection and try again."
   };
+  // Local number for the limit message. The worker includes it in every 429
+  // reply (by ZIP; never the toll-free line). Set by noteLimitPhone().
+  var limitPhone = null;
+  function noteLimitPhone(body) {
+    if (body && body.phone_display) limitPhone = { display: body.phone_display, digits: body.phone_digits };
+  }
   function gateMessage(err) {
     var code = err && err.message;
+    if (code === "RATE_LIMITED" && limitPhone) {
+      return "You\u2019ve reached the limit of instant estimates for this phone number or device. Call us at " + limitPhone.display + " and we\u2019ll price it for you.";
+    }
     return GATE_MESSAGES[code] || GATE_MESSAGES.NETWORK;
   }
 
@@ -966,6 +975,7 @@
       }
 
       if (!result.ok) {
+        if (result.status === 429) noteLimitPhone(result.body);
         throw new Error(
           result.status === 429 ? "RATE_LIMITED" :
           result.status === 422 ? "OUT_OF_AREA" :
@@ -1154,6 +1164,7 @@
     }).then(function (result) {
       if (!result.ok || result.body.in_service_area === false) {
         var outOfArea = result.status === 422 || result.body.in_service_area === false;
+        if (result.status === 429) noteLimitPhone(result.body);
         throw new Error(outOfArea ? "OUT_OF_AREA" : (result.body.error || "ADDRESS_LOOKUP_FAILED"));
       }
 
@@ -1233,6 +1244,7 @@
     }).then(function (result) {
       if (!result.ok || result.body.in_service_area === false) {
         var outOfArea = result.status === 422 || result.body.in_service_area === false;
+        if (result.status === 429) noteLimitPhone(result.body);
         var err = new Error(outOfArea ? "OUT_OF_AREA" : (result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "ADDRESS_LOOKUP_FAILED")));
         throw err;
       }
@@ -1258,7 +1270,7 @@
         return fetch(OTP_SEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken })
+          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip })
         });
       });
     }).then(function (res) {
@@ -1267,6 +1279,7 @@
       });
     }).then(function (result) {
       if (!result.ok || !result.body.sent) {
+        if (result.status === 429) noteLimitPhone(result.body);
         throw new Error(result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED"));
       }
       setBtnLoading(btn, false);
@@ -1595,7 +1608,7 @@
       return fetch(OTP_SEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken })
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1609,6 +1622,7 @@
         showOtpError("New code sent. Use the newest text.");
         otpCode.focus();
       } else if (result.status === 429) {
+        noteLimitPhone(result.body);
         showOtpError(gateMessage(new Error("RATE_LIMITED")));
       } else {
         showOtpError("Couldn't send a new code. Check your connection and tap \u201cResend code\u201d again.");
