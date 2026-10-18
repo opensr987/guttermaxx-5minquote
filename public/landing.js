@@ -1833,6 +1833,75 @@
 
 
   /* =====================================================
+     "LEFT BEFORE THE PRICE" REMINDER LINK (Oct 18 2026)
+     ?r=CODE  texted/emailed ~30 min after someone left the deck before
+              the price. Replays THEIR saved deck (their address, their
+              price) from slide 1. Reuses the existing quote: no new
+              attempt, no limit used, no new imagery.
+  ===================================================== */
+  (function reminderLink() {
+    var rCode = "";
+    try { rCode = new URLSearchParams(window.location.search).get("r") || ""; } catch (e) {}
+    if (!/^[A-Za-z0-9]{12}$/.test(rCode)) return;
+    var card = form && (form.closest(".form-card") || form.parentNode);
+    if (!card) return;
+    var panel = document.createElement("div");
+    panel.id = "reminderPanel";
+    panel.setAttribute("role", "status");
+    panel.style.cssText = "padding:6px 2px 4px;text-align:center;";
+    card.insertBefore(panel, card.firstChild);
+    if (formContainer) formContainer.classList.add("hide");
+    function show(title, body) {
+      panel.innerHTML = '<h3 style="margin:8px 0 10px;font-size:22px;line-height:1.25">' + title + '</h3>' + (body || "");
+      panel.scrollIntoView({ block: "center" });
+    }
+    show("Pulling up your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+      '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we load your home.</p>');
+
+    getTurnstileToken().then(function (token) {
+      return fetch(WORKER_BASE + "/api/deck-resume", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: rCode, turnstile_token: token })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, body: b }; });
+    }).then(function (r) {
+      var b = r.body || {};
+      if (!r.ok || !b.ok || !b.submission_id) {
+        if (b.error === "LINK_EXPIRED" || b.error === "LINK_NOT_FOUND") {
+          show("This link has expired", '<p style="margin:0;font-size:15px;line-height:1.5">No problem. Fill out the form below to start a new estimate.</p>');
+          if (formContainer) formContainer.classList.remove("hide");
+        } else {
+          show("That didn&rsquo;t go through", '<p style="margin:0;font-size:15px;line-height:1.5">Please refresh this page to try again.</p>');
+        }
+        return;
+      }
+      var digits = String(b.phone_e164 || "").replace(/\D/g, "").slice(-10);
+      leadData = {
+        first_name: b.first_name, last_name: b.last_name, phone: digits, email: b.email,
+        address: b.street, zip: b.zip, color_preference: "",
+        territory: b.territory || territoryFor(b.zip) || FALLBACK_TERRITORY,
+        source: "Reminder link", submitted_at: new Date().toISOString()
+      };
+      pendingRequest = {
+        request_id: null, territory: b.territory, zip: b.zip, address_key: b.address_key,
+        formatted_address: b.formatted_address, lat: b.lat, lng: b.lng
+      };
+      if (activeTracker) activeTracker.stop();
+      activeTracker = createSubmissionTracker(b.submission_id, function () {});
+      activeTracker.start();
+      window.GM5ME = createDeckReporter(b.submission_id);
+      panel.innerHTML = "";
+      showQuoteTransition();
+      openDeck(b.submission_id);
+    }).catch(function (err) {
+      console.error(err);
+      show("That didn&rsquo;t go through", '<p style="margin:0;font-size:15px;line-height:1.5">Please refresh this page to try again.</p>');
+    });
+  })();
+
+
+  /* =====================================================
      MISC
   ===================================================== */
   $("#year").textContent = new Date().getFullYear();
