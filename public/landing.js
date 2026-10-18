@@ -1833,7 +1833,8 @@
 
 
   /* =====================================================
-     "LEFT BEFORE THE PRICE" REMINDER LINK (Oct 18 2026)
+     5ME FOLLOW-UP JOURNEY LINK (Oct 18 2026) — every drip text/email
+     (Stage 1 price-ready reminder, Stage 2 Fall Specials, later stages)
      ?r=CODE  texted/emailed ~30 min after someone left the deck before
               the price. Replays THEIR saved deck (their address, their
               price) from slide 1. Reuses the existing quote: no new
@@ -1842,7 +1843,7 @@
   (function reminderLink() {
     var rCode = "";
     try { rCode = new URLSearchParams(window.location.search).get("r") || ""; } catch (e) {}
-    if (!/^[A-Za-z0-9]{12}$/.test(rCode)) return;
+    if (!/^(?:[A-Za-z0-9]{6}|[A-Za-z0-9]{12})$/.test(rCode)) return; // journey (6) or legacy (12)
     var card = form && (form.closest(".form-card") || form.parentNode);
     if (!card) return;
     var panel = document.createElement("div");
