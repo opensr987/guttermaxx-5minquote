@@ -821,9 +821,17 @@
   // Deck -> page bridges (the deck runs in a same-origin iframe).
   // Booking: same GHL calendars as the landing-page Zoom / In-Home Demo CTAs,
   // routed by the customer's ZIP.
-  window.GM5MEBook = function (step) {
+  // `booking` (from the deck / worker quote-status) = { demo_calendar_id,
+  // zoom_calendar_id, territory }: in-home = the lead source's calendar,
+  // Zoom = the territory's. Missing -> this page's defaults, as before.
+  var TERRITORY_KEY = { DFW: "dfw", HOU: "houston", SAA: "sanaus" };
+  window.GM5MEBook = function (step, booking) {
     if (step !== "virtual-15-min" && step !== "in-home-demo") return;
-    openBooking(step, null, territoryFor(leadData && leadData.zip));
+    var b = booking || {};
+    var cal = step === "in-home-demo" ? b.demo_calendar_id : b.zoom_calendar_id;
+    if (!/^[A-Za-z0-9]{15,30}$/.test(String(cal || ""))) cal = null;
+    var key = (cal && TERRITORY_KEY[b.territory]) || territoryFor(leadData && leadData.zip);
+    openBooking(step, cal, key);
   };
   // MANUAL_REVIEW screen's "Submit for Review" -> ManualReview@ alias.
   window.GM5MEManualReview = function () {
