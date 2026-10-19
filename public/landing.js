@@ -697,7 +697,7 @@
   //   GM5ME.callMeNow(["senior", ...], otherText)   Call Me Now! on Check Qualifying Discounts
   //     (otherText = customer's 15-char note when "other" is picked)
   // ---------------------------------------------------------------------
-  var DECK_ACTIONS = ["price_viewed", "price_locked", "financing_started", "savings_inquiry"];
+  var DECK_ACTIONS = ["price_viewed", "price_locked", "financing_started", "savings_inquiry", "book_zoom", "book_in_home", "discounts_viewed"];
   var DISCOUNT_IDS = ["senior", "military", "first-responder", "teacher-healthcare", "neighbor-referral", "pay-in-full", "other"];
 
   function createDeckReporter(submissionId) {
