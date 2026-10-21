@@ -36,6 +36,17 @@ export default function RootLayout({ children }) {
         />
         <script src="https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js" async></script>
         <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+        {/* Google tag (gtag.js) — Google Ads AW-17540216052 (owner, 2026-10-21) */}
+        <script async src="https://www.googletagmanager.com/gtag/js?id=AW-17540216052"></script>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+
+gtag('config', 'AW-17540216052');`,
+          }}
+        />
         {/* Nextdoor Pixel */}
         <script
           dangerouslySetInnerHTML={{
