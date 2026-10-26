@@ -1835,7 +1835,7 @@
     // back to the number screen, which opens by itself once the number fills.
     function goFlow() {
       if (askNow) { phonePanel(); return; }
-      show("Building your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+      show("Loading your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
         '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
       claim().then(function (b) {
         b = b || {};
