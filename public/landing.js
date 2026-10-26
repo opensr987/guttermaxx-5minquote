@@ -1717,8 +1717,15 @@
      Normal visitors (no ?fb=) are unaffected.
   ===================================================== */
   (function facebookInstantForm() {
-    var fbParam = "";
-    try { fbParam = new URLSearchParams(window.location.search).get("fb") || ""; } catch (e) {}
+    var fbParam = "", formSource = "facebook";
+    try {
+      var qs0 = new URLSearchParams(window.location.search);
+      fbParam = qs0.get("fb") || "";
+      // ?nd=go&t=HOU — the Nextdoor Lead Gen form's success-page button
+      // (owner, Oct 26 2026). Same flow, but only ever Nextdoor forms.
+      if (!fbParam && qs0.get("nd")) { fbParam = qs0.get("nd"); formSource = "nextdoor"; }
+    } catch (e) {}
+    var formPlatform = formSource === "nextdoor" ? "Nextdoor" : "Facebook";
     // ?fb=go&t=HOU (and the older ?fb=thanks): the Meta form's thank-you
     // button. Opens the deck of whoever just submitted that territory's form,
     // nothing to type (owner, Oct 26 2026). Phone only if 2 submitted at once.
@@ -1757,7 +1764,7 @@
       var btn = $("#fbResendBtn");
       btn.addEventListener("click", function () {
         var digits = String($("#fbResendPhone").value || "").replace(/\D/g, "");
-        if (digits.length < 10) { $("#fbResendMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        if (digits.length < 10) { $("#fbResendMsg").textContent = "Enter the 10-digit mobile number you used on " + formPlatform + "."; return; }
         setBtnLoading(btn, true, "Sending\u2026");
         getTurnstileToken().then(function (token) {
           return fetch(WORKER_BASE + "/api/fb-resend", {
@@ -1778,14 +1785,14 @@
       return getTurnstileToken().then(function (token) {
         return fetch(WORKER_BASE + "/api/fb-claim", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(Object.assign({ territory: fbTerr, turnstile_token: token }, body || {}))
+          body: JSON.stringify(Object.assign({ territory: fbTerr, source: formSource, turnstile_token: token }, body || {}))
         });
       }).then(function (res) { return res.json().catch(function () { return {}; }); });
     }
 
     function phonePanel(note) {
       show("Your estimate is ready",
-        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Tap the box and pick the mobile number you just used on Facebook. Your <b>GutterMaxx 5-Minute Estimate</b> opens automatically.") + '</p>' +
+        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Tap the box and pick the mobile number you just used on " + formPlatform + ". Your <b>GutterMaxx 5-Minute Estimate</b> opens automatically.") + '</p>' +
         '<input type="tel" id="fbClaimPhone" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" style="width:100%;max-width:320px;height:46px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:16px;margin-top:10px">' +
         '<p style="margin:10px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="fbClaimBtn" style="max-width:320px">Open My Estimate</button></p>' +
         '<p id="fbClaimMsg" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
@@ -1809,7 +1816,7 @@
       btn.addEventListener("click", function () {
         if (busy) return;
         var digits = fullNumber();
-        if (!digits) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        if (!digits) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on " + formPlatform + "."; return; }
         busy = true;
         setBtnLoading(btn, true, "Opening\u2026");
         var tries = 0;
@@ -1841,7 +1848,7 @@
         b = b || {};
         if (b.ok && b.code) {
           var first = String(b.first_name || "").trim();
-          var notYou = "?fb=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
+          var notYou = "?" + (formSource === "nextdoor" ? "nd" : "fb") + "=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
           show("Opening " + (first ? esc(first) + "&rsquo;s" : "your") + " estimate\u2026",
             '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>' +
             (first ? '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>' : ""));
@@ -1884,13 +1891,14 @@
 
       // Same state the website form builds, so quote-start, the deck, the
       // ATTOM retry panel and the deck's booking buttons all work unchanged.
-      LEAD_SOURCE = "facebook";
+      var isNd = b.lead_source === "nextdoor";
+      LEAD_SOURCE = isNd ? "nextdoor" : "facebook";
       var digits = String(b.phone_e164 || "").replace(/\D/g, "").slice(-10);
       leadData = {
         first_name: b.first_name, last_name: b.last_name, phone: digits, email: b.email,
         address: b.street, zip: b.zip, color_preference: "",
         territory: b.territory || territoryFor(b.zip) || FALLBACK_TERRITORY,
-        source: "Facebook Instant Form", lead_source: "facebook", submitted_at: new Date().toISOString()
+        source: isNd ? "Nextdoor Lead Form" : "Facebook Instant Form", lead_source: LEAD_SOURCE, submitted_at: new Date().toISOString()
       };
       pendingRequest = {
         request_id: b.request_id, territory: b.territory, zip: b.zip, address_key: b.address_key,
