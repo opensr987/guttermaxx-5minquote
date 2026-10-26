@@ -1785,15 +1785,32 @@
 
     function phonePanel(note) {
       show("Your estimate is ready",
-        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Tap the box and pick the mobile number you just used on Facebook. We&rsquo;ll open your <b>GutterMaxx 5-Minute Estimate</b> right away.") + '</p>' +
+        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Tap the box and pick the mobile number you just used on Facebook. Your <b>GutterMaxx 5-Minute Estimate</b> opens automatically.") + '</p>' +
         '<input type="tel" id="fbClaimPhone" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" style="width:100%;max-width:320px;height:46px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:16px;margin-top:10px">' +
         '<p style="margin:10px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="fbClaimBtn" style="max-width:320px">Open My Estimate</button></p>' +
         '<p id="fbClaimMsg" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
-      var btn = $("#fbClaimBtn");
-      try { $("#fbClaimPhone").focus(); } catch (e) {}
+      var btn = $("#fbClaimBtn"), input = $("#fbClaimPhone"), busy = false, autoTimer = null;
+      try { input.focus(); } catch (e) {}
+      // Owner, Oct 26: no button press. The moment their phone's autofill (or
+      // their typing) completes a full number, open the estimate by itself.
+      // The number is still the lock: only that number's own form opens.
+      function fullNumber() {
+        var d = String(input.value || "").replace(/\D/g, "");
+        if (d.length === 11 && d.charAt(0) === "1") d = d.slice(1);
+        return d.length === 10 ? d : "";
+      }
+      function onValue() {
+        clearTimeout(autoTimer);
+        if (!busy && fullNumber()) autoTimer = setTimeout(function () { if (!busy && fullNumber()) btn.click(); }, 350);
+      }
+      ["input", "change", "keyup", "blur"].forEach(function (ev) { input.addEventListener(ev, onValue); });
+      // Some in-app browsers fill the box without firing any event — check briefly.
+      var polls = 0, poller = setInterval(function () { if (busy || ++polls > 240) { clearInterval(poller); return; } onValue(); }, 500);
       btn.addEventListener("click", function () {
-        var digits = String($("#fbClaimPhone").value || "").replace(/\D/g, "");
-        if (digits.length < 10) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        if (busy) return;
+        var digits = fullNumber();
+        if (!digits) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        busy = true;
         setBtnLoading(btn, true, "Opening\u2026");
         var tries = 0;
         (function ask() {
@@ -1803,7 +1820,7 @@
             if (b.pending && tries++ < 2) return ask(); // their form may still be on its way
             setBtnLoading(btn, false);
             textsPanel();
-          }).catch(function () { setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
+          }).catch(function () { busy = false; setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
         })();
       });
     }
