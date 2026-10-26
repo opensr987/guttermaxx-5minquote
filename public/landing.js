@@ -1784,48 +1784,33 @@
     }
 
     function phonePanel(note) {
-      show("Let&rsquo;s open your estimate",
-        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Confirm the mobile number you just used on Facebook and we&rsquo;ll open your <b>GutterMaxx 5-Minute Estimate</b>.") + '</p>' +
+      show("Your estimate is ready",
+        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Tap the box and pick the mobile number you just used on Facebook. We&rsquo;ll open your <b>GutterMaxx 5-Minute Estimate</b> right away.") + '</p>' +
         '<input type="tel" id="fbClaimPhone" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" style="width:100%;max-width:320px;height:46px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:16px;margin-top:10px">' +
         '<p style="margin:10px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="fbClaimBtn" style="max-width:320px">Open My Estimate</button></p>' +
         '<p id="fbClaimMsg" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
       var btn = $("#fbClaimBtn");
+      try { $("#fbClaimPhone").focus(); } catch (e) {}
       btn.addEventListener("click", function () {
         var digits = String($("#fbClaimPhone").value || "").replace(/\D/g, "");
         if (digits.length < 10) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
         setBtnLoading(btn, true, "Opening\u2026");
-        claim({ phone: digits }).then(function (b) {
-          setBtnLoading(btn, false);
-          if (b && b.ok && b.code) return startWithCode(b.code);
-          textsPanel();
-        }).catch(function () { setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
+        var tries = 0;
+        (function ask() {
+          claim({ phone: digits }).then(function (b) {
+            b = b || {};
+            if (b.ok && b.code) { setBtnLoading(btn, false); return startWithCode(b.code); }
+            if (b.pending && tries++ < 2) return ask(); // their form may still be on its way
+            setBtnLoading(btn, false);
+            textsPanel();
+          }).catch(function () { setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
+        })();
       });
     }
 
-    function goFlow() {
-      if (askNow) { phonePanel(); return; }
-      show("Building your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
-        '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
-      var tries = 0;
-      (function attempt() {
-        claim().then(function (b) {
-          b = b || {};
-          if (b.ok && b.code) {
-            var first = String(b.first_name || "").trim();
-            if (first) {
-              var notYou = "?fb=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
-              show("Opening " + esc(first) + "&rsquo;s estimate\u2026",
-                '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>' +
-                '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>');
-            }
-            return startWithCode(b.code, true);
-          }
-          if (b.ask_phone) return phonePanel();
-          if (b.pending && tries++ < 2) return attempt();
-          textsPanel();
-        }).catch(function () { textsPanel(); });
-      })();
-    }
+    // LOCK (owner, Oct 26): the thank-you button always asks for the number
+    // they just used, and only that number's own estimate can open.
+    function goFlow() { phonePanel(); }
 
     function startWithCode(code, keepPanel) {
     if (!keepPanel) show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
