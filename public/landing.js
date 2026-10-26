@@ -1830,9 +1830,30 @@
       });
     }
 
-    // LOCK (owner, Oct 26): the thank-you button always asks for the number
-    // they just used, and only that number's own estimate can open.
-    function goFlow() { phonePanel(); }
+    // Owner, Oct 26: no clicks. Open the deck of the ONE form that just came
+    // in for this territory. If two came in at once (or none arrives), fall
+    // back to the number screen, which opens by itself once the number fills.
+    function goFlow() {
+      if (askNow) { phonePanel(); return; }
+      show("Building your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+        '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
+      claim().then(function (b) {
+        b = b || {};
+        if (b.ok && b.code) {
+          var first = String(b.first_name || "").trim();
+          var notYou = "?fb=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
+          show("Opening " + (first ? esc(first) + "&rsquo;s" : "your") + " estimate\u2026",
+            '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>' +
+            (first ? '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>' : ""));
+          return startWithCode(b.code, true);
+        }
+        if (b.reason && b.phone_digits) {
+          show("We need a hand with your property details", '<p style="margin:0;font-size:15px;line-height:1.5">We couldn&rsquo;t start your estimate online. Give us a call and we&rsquo;ll finish it with you.</p>' + callLine(b.phone_digits, b.phone_display));
+          return;
+        }
+        phonePanel();
+      }).catch(function () { phonePanel(); });
+    }
 
     function startWithCode(code, keepPanel) {
     if (!keepPanel) show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
