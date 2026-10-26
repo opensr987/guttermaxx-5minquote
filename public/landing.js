@@ -1817,8 +1817,13 @@
           claim({ phone: digits }).then(function (b) {
             b = b || {};
             if (b.ok && b.code) { setBtnLoading(btn, false); return startWithCode(b.code); }
-            if (b.pending && tries++ < 2) return ask(); // their form may still be on its way
+            if (b.pending && tries++ < 1) return ask(); // their form may still be on its way
             setBtnLoading(btn, false);
+            if (b.reason && b.phone_digits) {
+              // No link was ever sent for this form (e.g. address not found) — call, not texts.
+              show("We need a hand with your property details", '<p style="margin:0;font-size:15px;line-height:1.5">We couldn&rsquo;t start your estimate online. Give us a call and we&rsquo;ll finish it with you.</p>' + callLine(b.phone_digits, b.phone_display));
+              return;
+            }
             textsPanel();
           }).catch(function () { busy = false; setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
         })();
