@@ -1719,9 +1719,15 @@
   (function facebookInstantForm() {
     var fbParam = "";
     try { fbParam = new URLSearchParams(window.location.search).get("fb") || ""; } catch (e) {}
-    var isThanks = fbParam === "thanks";
+    // ?fb=go&t=HOU (and the older ?fb=thanks): the Meta form's thank-you
+    // button. Opens the deck of whoever just submitted that territory's form,
+    // nothing to type (owner, Oct 26 2026). Phone only if 2 submitted at once.
+    var isGo = fbParam === "go" || fbParam === "thanks";
+    var fbTerr = "", askNow = false;
+    try { var sp = new URLSearchParams(window.location.search); fbTerr = (sp.get("t") || "").toUpperCase(); askNow = sp.get("ask") === "1"; } catch (e) {}
+    if (!/^(DFW|HOU|SAA)$/.test(fbTerr)) fbTerr = "";
     var fbCode = /^[A-Za-z0-9]{12}$/.test(fbParam) ? fbParam : "";
-    if (!isThanks && !fbCode) return;
+    if (!isGo && !fbCode) return;
 
     var card = form && (form.closest(".form-card") || form.parentNode);
     if (!card) return;
@@ -1741,7 +1747,7 @@
       return digits ? '<p style="margin:14px 0 0"><a class="cta-btn cta-btn-primary" style="text-decoration:none" href="tel:+1' + esc(digits) + '">Call ' + esc(display || "us") + '</a></p>' : "";
     }
 
-    if (isThanks) {
+    function textsPanel() {
       show("You&rsquo;re all set!",
         '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">We just texted you a personal link to start your <b>GutterMaxx 5-Minute Estimate</b>. Open your texts and tap the link.</p>' +
         '<p style="margin:18px 0 6px;font-size:14px;font-weight:700;color:#5f6a63">Didn&rsquo;t get it?</p>' +
@@ -1766,16 +1772,69 @@
           $("#fbResendMsg").textContent = "That didn\u2019t go through. Check your connection and try again.";
         });
       });
-      return;
     }
 
-    show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+    function claim(body) {
+      return getTurnstileToken().then(function (token) {
+        return fetch(WORKER_BASE + "/api/fb-claim", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.assign({ territory: fbTerr, turnstile_token: token }, body || {}))
+        });
+      }).then(function (res) { return res.json().catch(function () { return {}; }); });
+    }
+
+    function phonePanel(note) {
+      show("Let&rsquo;s open your estimate",
+        '<p style="margin:0 0 6px;font-size:16px;line-height:1.5">' + (note || "Confirm the mobile number you just used on Facebook and we&rsquo;ll open your <b>GutterMaxx 5-Minute Estimate</b>.") + '</p>' +
+        '<input type="tel" id="fbClaimPhone" inputmode="tel" autocomplete="tel" placeholder="Your mobile number" style="width:100%;max-width:320px;height:46px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:16px;margin-top:10px">' +
+        '<p style="margin:10px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="fbClaimBtn" style="max-width:320px">Open My Estimate</button></p>' +
+        '<p id="fbClaimMsg" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
+      var btn = $("#fbClaimBtn");
+      btn.addEventListener("click", function () {
+        var digits = String($("#fbClaimPhone").value || "").replace(/\D/g, "");
+        if (digits.length < 10) { $("#fbClaimMsg").textContent = "Enter the 10-digit mobile number you used on Facebook."; return; }
+        setBtnLoading(btn, true, "Opening\u2026");
+        claim({ phone: digits }).then(function (b) {
+          setBtnLoading(btn, false);
+          if (b && b.ok && b.code) return startWithCode(b.code);
+          textsPanel();
+        }).catch(function () { setBtnLoading(btn, false); $("#fbClaimMsg").textContent = "That didn\u2019t go through. Check your connection and try again."; });
+      });
+    }
+
+    function goFlow() {
+      if (askNow) { phonePanel(); return; }
+      show("Building your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
+        '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
+      var tries = 0;
+      (function attempt() {
+        claim().then(function (b) {
+          b = b || {};
+          if (b.ok && b.code) {
+            var first = String(b.first_name || "").trim();
+            if (first) {
+              var notYou = "?fb=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
+              show("Opening " + esc(first) + "&rsquo;s estimate\u2026",
+                '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>' +
+                '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>');
+            }
+            return startWithCode(b.code, true);
+          }
+          if (b.ask_phone) return phonePanel();
+          if (b.pending && tries++ < 2) return attempt();
+          textsPanel();
+        }).catch(function () { textsPanel(); });
+      })();
+    }
+
+    function startWithCode(code, keepPanel) {
+    if (!keepPanel) show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
       '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
 
-    Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
+    return Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
       return fetch(WORKER_BASE + "/api/fb-start", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ code: fbCode, device_fingerprint: r[0], turnstile_token: r[1] }, TEST_KEY ? { test_key: TEST_KEY } : {}))
+        body: JSON.stringify(Object.assign({ code: code, device_fingerprint: r[0], turnstile_token: r[1] }, TEST_KEY ? { test_key: TEST_KEY } : {}))
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
@@ -1837,6 +1896,9 @@
       console.error(err);
       show("That didn&rsquo;t go through", '<p style="margin:0;font-size:15px;line-height:1.5">' + esc(gateMessage(err)) + '</p>');
     });
+    }
+
+    if (fbCode) startWithCode(fbCode); else goFlow();
   })();
 
 
