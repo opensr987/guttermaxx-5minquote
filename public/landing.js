@@ -2014,3 +2014,36 @@
   $("#year").textContent = new Date().getFullYear();
 
 })();
+
+/* Desktop fit-to-screen (owner, Oct 28 2026): on short laptop screens or
+   browser zoom, the assessment block is taller than the space between header
+   and footer and was clipped top & bottom. Shrink it just enough to fit. */
+(function () {
+  function fit() {
+    var sec = document.querySelector("section.assessment");
+    var box = sec && sec.querySelector(":scope > .container");
+    var main = document.getElementById("main");
+    if (!box || !main) return;
+    box.style.zoom = "";
+    if (window.innerWidth <= 900) return;
+    var cs = getComputedStyle(sec);
+    var avail = main.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 4;
+    var need = box.offsetHeight;
+    if (need > avail && avail > 0) box.style.zoom = String(Math.max(0.6, avail / need));
+  }
+  var raf = 0;
+  function queue() { cancelAnimationFrame(raf); raf = requestAnimationFrame(fit); }
+  window.addEventListener("resize", queue);
+  window.addEventListener("load", queue);
+  if (document.readyState !== "loading") queue(); else document.addEventListener("DOMContentLoaded", queue);
+  if (window.ResizeObserver) {
+    var last = "";
+    new ResizeObserver(function () {
+      var box = document.querySelector("section.assessment > .container");
+      var key = box ? box.scrollHeight + "x" + window.innerHeight : "";
+      if (key !== last) { last = key; queue(); }
+    }).observe(document.documentElement);
+  }
+  document.addEventListener("input", queue, true);
+  document.addEventListener("click", function () { setTimeout(queue, 50); }, true);
+})();
