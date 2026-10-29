@@ -1077,6 +1077,7 @@
   // lookup, OTP send, lead capture) must present its own token server-side.
   var turnstileWidgetId = null;
   var turnstilePending = null;
+  var turnstileUsedOnce = false;
 
   function ensureTurnstileWidget() {
     if (turnstileWidgetId !== null || !window.turnstile || !$("#cf-turnstile")) return;
@@ -1127,6 +1128,11 @@
           if (turnstileWidgetId === null) { settle(null); return; }
           turnstilePending = { resolve: settle };
           try {
+            // Oct 29 2026: without reset(), execute() hands back the SAME
+            // already-used token, which Cloudflare rejects as a duplicate on
+            // the next step (OTP send) or on any retry -> visitor blocked.
+            if (turnstileUsedOnce) { try { window.turnstile.reset(turnstileWidgetId); } catch (e) {} }
+            turnstileUsedOnce = true;
             window.turnstile.execute(turnstileWidgetId);
           } catch (e) {
             turnstilePending = null;
