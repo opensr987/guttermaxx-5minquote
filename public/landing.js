@@ -1730,8 +1730,10 @@
       // ?nd=go&t=HOU — the Nextdoor Lead Gen form's success-page button
       // (owner, Oct 26 2026). Same flow, but only ever Nextdoor forms.
       if (!fbParam && qs0.get("nd")) { fbParam = qs0.get("nd"); formSource = "nextdoor"; }
+      // ?tt=go&t=HOU — the TikTok Instant Form's thank-you button (owner, Oct 29 2026).
+      if (!fbParam && qs0.get("tt")) { fbParam = qs0.get("tt"); formSource = "tiktok"; }
     } catch (e) {}
-    var formPlatform = formSource === "nextdoor" ? "Nextdoor" : "Facebook";
+    var formPlatform = formSource === "nextdoor" ? "Nextdoor" : formSource === "tiktok" ? "TikTok" : "Facebook";
     // ?fb=go&t=HOU (and the older ?fb=thanks): the Meta form's thank-you
     // button. Opens the deck of whoever just submitted that territory's form,
     // nothing to type (owner, Oct 26 2026). Phone only if 2 submitted at once.
@@ -1854,7 +1856,7 @@
         b = b || {};
         if (b.ok && b.code) {
           var first = String(b.first_name || "").trim();
-          var notYou = "?" + (formSource === "nextdoor" ? "nd" : "fb") + "=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
+          var notYou = "?" + (formSource === "nextdoor" ? "nd" : formSource === "tiktok" ? "tt" : "fb") + "=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
           show("Opening " + (first ? esc(first) + "&rsquo;s" : "your") + " estimate\u2026",
             '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we read your address.</p>' +
             (first ? '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>' : ""));
@@ -1897,14 +1899,14 @@
 
       // Same state the website form builds, so quote-start, the deck, the
       // ATTOM retry panel and the deck's booking buttons all work unchanged.
-      var isNd = b.lead_source === "nextdoor";
-      LEAD_SOURCE = isNd ? "nextdoor" : "facebook";
+      var isNd = b.lead_source === "nextdoor", isTt = b.lead_source === "tiktok";
+      LEAD_SOURCE = isNd ? "nextdoor" : isTt ? "tiktok" : "facebook";
       var digits = String(b.phone_e164 || "").replace(/\D/g, "").slice(-10);
       leadData = {
         first_name: b.first_name, last_name: b.last_name, phone: digits, email: b.email,
         address: b.street, zip: b.zip, color_preference: "",
         territory: b.territory || territoryFor(b.zip) || FALLBACK_TERRITORY,
-        source: isNd ? "Nextdoor Lead Form" : "Facebook Instant Form", lead_source: LEAD_SOURCE, submitted_at: new Date().toISOString()
+        source: isNd ? "Nextdoor Lead Form" : isTt ? "TikTok Instant Form" : "Facebook Instant Form", lead_source: LEAD_SOURCE, submitted_at: new Date().toISOString()
       };
       pendingRequest = {
         request_id: b.request_id, territory: b.territory, zip: b.zip, address_key: b.address_key,
