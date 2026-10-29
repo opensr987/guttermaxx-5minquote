@@ -1849,14 +1849,14 @@
     function goFlow() {
       if (askNow) { phonePanel(); return; }
       show("Loading your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
-        '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
+        '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we read your address.</p>');
       claim().then(function (b) {
         b = b || {};
         if (b.ok && b.code) {
           var first = String(b.first_name || "").trim();
           var notYou = "?" + (formSource === "nextdoor" ? "nd" : "fb") + "=go&ask=1" + (fbTerr ? "&t=" + fbTerr : "");
           show("Opening " + (first ? esc(first) + "&rsquo;s" : "your") + " estimate\u2026",
-            '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>' +
+            '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we read your address.</p>' +
             (first ? '<p style="margin:12px 0 0;font-size:13px"><a href="' + notYou + '" style="color:#5f6a63">Not ' + esc(first) + '? Tap here</a></p>' : ""));
           return startWithCode(b.code, true);
         }
@@ -1870,7 +1870,7 @@
 
     function startWithCode(code, keepPanel) {
     if (!keepPanel) show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
-      '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we pull up your home.</p>');
+      '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we read your address.</p>');
 
     return Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
       return fetch(WORKER_BASE + "/api/fb-start", {
