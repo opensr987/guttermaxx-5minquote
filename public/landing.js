@@ -48,6 +48,21 @@
       if (!readCookie("_fbp")) writeCookie("_fbp", "fb.1." + Date.now() + "." + Math.floor(Math.random() * 1e10));
     } catch (e) {}
   })();
+  /* ---------- Google Ads conversion (YouTube / Google campaigns) ----------
+     Fires the "Quote Form Submit" lead conversion in Google Ads AW-17540216052 when
+     quote-start succeeds (same moment the Meta Lead fires). Google only
+     credits it to a campaign if the visitor came from a Google/YouTube ad,
+     so organic, Nextdoor and TikTok leads are not counted as ad leads.
+     transaction_id = submission_id so a refresh never double-counts. */
+  function googleAdsTrackLead(submissionId) {
+    try {
+      if (typeof window.gtag !== "function") return;
+      window.gtag("event", "conversion", {
+        send_to: "AW-17540216052/BtrJCPjYzJIcEPTp6atB",
+        transaction_id: submissionId ? String(submissionId) : ""
+      });
+    } catch (e) { console.error("[gads] conversion failed", e); }
+  }
   function metaTrackLead(pixelId, eventId) {
     if (!pixelId || !eventId) return;
     try {
@@ -1015,6 +1030,7 @@
         activeTracker.start();
         window.GM5ME = createDeckReporter(result.body.submission_id);
         metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
+        googleAdsTrackLead(result.body.submission_id);
         showQuoteTransition();
         openDeck(result.body.submission_id);
         return;
@@ -1025,6 +1041,7 @@
       if (result.body && result.body.submission_id && result.body.status === "manual_review") {
         window.GM5ME = createDeckReporter(result.body.submission_id);
         metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
+        googleAdsTrackLead(result.body.submission_id);
         showQuoteTransition();
         openDeck(result.body.submission_id);
         return;
