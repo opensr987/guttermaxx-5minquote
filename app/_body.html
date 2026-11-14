@@ -1070,13 +1070,14 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="26" height="26"><rect x="5" y="3" width="14" height="18" rx="2.5"/><path d="M9 18h6"/></svg>
     </div>
     <h3 id="otpTitle">Verify your number</h3>
-    <p id="otpSubtitle">We just texted a 6-digit code to <strong id="otpPhoneDisplay"></strong>.</p>
+    <p id="otpSubtitle"><span id="otpSubtitleText">We just texted a 6-digit code to </span><strong id="otpPhoneDisplay"></strong>.</p>
     <div class="otp-input-row">
       <input type="text" id="otpCode" inputmode="numeric" maxlength="6" placeholder="000000" autocomplete="one-time-code" aria-label="6-digit verification code">
     </div>
     <p class="otp-error" id="otpError" role="alert"></p>
     <button type="button" class="otp-verify-btn" id="otpVerifyBtn">Verify &amp; continue</button>
     <button type="button" class="otp-resend" id="otpResend">Resend code</button>
+    <button type="button" class="otp-resend otp-callme" id="otpCallMe">Call me with the code instead</button>
   </div>
 </div>
 
