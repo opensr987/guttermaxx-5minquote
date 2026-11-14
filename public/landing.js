@@ -626,6 +626,21 @@
     };
   }
 
+  // Everything typed on the form, saved with the code request so the team
+  // gets a "Phone Number Code Issue" email if the visitor doesn't reach the
+  // deck within 5 minutes (owner, Nov 14 2026).
+  function otpLeadPayload() {
+    if (!leadData) return null;
+    return {
+      first_name: leadData.first_name, last_name: leadData.last_name, phone: leadData.phone,
+      email: leadData.email, address: leadData.address, zip: leadData.zip,
+      color_preference: leadData.color_preference, territory: leadData.territory,
+      lead_source: leadData.lead_source, source: leadData.source,
+      consent: true, homeowner_certified: true,
+      page_url: String(location.href || "").slice(0, 500)
+    };
+  }
+
   function toE164(phoneDisplay) {
     return "+1" + phoneDisplay.replace(/\D/g, "");
   }
@@ -1301,7 +1316,7 @@
         return fetch(OTP_SEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip })
+          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip, lead: otpLeadPayload() })
         });
       });
     }).then(function (res) {
@@ -1531,6 +1546,8 @@
   var otpVerifyBtn = $("#otpVerifyBtn");
   var otpResend = $("#otpResend");
   var otpPhoneDisplay = $("#otpPhoneDisplay");
+  var otpCallMe = $("#otpCallMe");
+  var otpSubtitleText = $("#otpSubtitleText");
   var otpLastFocus = null;
 
   function showOtpError(msg) {
@@ -1543,6 +1560,8 @@
     otpCode.value = "";
     showOtpError("");
     otpPhoneDisplay.textContent = (leadData && leadData.phone) || "your phone";
+    if (otpSubtitleText) otpSubtitleText.textContent = "We just texted a 6-digit code to ";
+    if (otpCallMe) { otpCallMe.disabled = false; otpCallMe.textContent = "Call me with the code instead"; }
     otpLastFocus = document.activeElement;
     otpModal.classList.add("open");
     document.body.style.overflow = "hidden";
@@ -1574,7 +1593,7 @@
   otpVerifyBtn.addEventListener("click", function () {
     var code = otpCode.value.trim();
     if (!/^\d{6}$/.test(code)) {
-      showOtpError("Enter the 6-digit code we texted you.");
+      showOtpError("Enter the 6-digit code we sent you.");
       otpCode.focus();
       return;
     }
@@ -1639,7 +1658,7 @@
       return fetch(OTP_SEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip })
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, lead: otpLeadPayload() })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1662,6 +1681,45 @@
       otpResend.disabled = false;
       otpResend.textContent = original;
       showOtpError("Couldn't send a new code. Check your connection and tap \u201cResend code\u201d again.");
+    });
+  });
+
+
+  /* "Call me with the code instead" — for landlines / texts that never
+     arrive. Same otp-send endpoint, channel "call" (Twilio Verify voice). */
+  if (otpCallMe) otpCallMe.addEventListener("click", function () {
+    if (!pendingRequest || !leadData) return;
+    otpCallMe.disabled = true;
+    var original = otpCallMe.textContent;
+    otpCallMe.textContent = "Calling\u2026";
+    getTurnstileToken().then(function (turnstileToken) {
+      return fetch(OTP_SEND_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, channel: "call", lead: otpLeadPayload() })
+      });
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        return { ok: res.ok, status: res.status, body: body };
+      });
+    }).then(function (result) {
+      otpCallMe.disabled = false;
+      otpCallMe.textContent = original;
+      if (result.ok && result.body.sent) {
+        otpCode.value = "";
+        if (otpSubtitleText) otpSubtitleText.textContent = "We\u2019re calling now with your 6-digit code at ";
+        showOtpError("Answer the call from us and enter the code it reads to you.");
+        otpCode.focus();
+      } else if (result.status === 429) {
+        noteLimitPhone(result.body);
+        showOtpError(gateMessage(new Error("RATE_LIMITED")));
+      } else {
+        showOtpError("We couldn\u2019t place the call. Please try again in a moment.");
+      }
+    }).catch(function () {
+      otpCallMe.disabled = false;
+      otpCallMe.textContent = original;
+      showOtpError("We couldn\u2019t place the call. Check your connection and try again.");
     });
   });
 
