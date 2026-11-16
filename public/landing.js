@@ -930,6 +930,7 @@
 
     var phoneDigits = attomRetry.phone_digits || "";
     $("#attomCallBtn").href = phoneDigits ? "tel:+1" + phoneDigits : "tel:";
+    $("#attomCallBtn").style.display = phoneDigits ? "" : "none"; // no local line -> no call button
     $("#attomCallPhone").textContent = attomRetry.phone_display || "our local team";
 
     showCtaError("attomRetryError", "");
