@@ -63,20 +63,37 @@
       });
     } catch (e) { console.error("[gads] conversion failed", e); }
   }
+  var metaInited = {};
+  function metaPixel(pixelId) {
+    if (!window.fbq) {
+      var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
+      if (!window._fbq) window._fbq = n;
+      n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
+      var t = document.createElement("script"); t.async = true;
+      t.src = "https://connect.facebook.net/en_US/fbevents.js";
+      document.head.appendChild(t);
+    }
+    if (!metaInited[pixelId]) {
+      metaInited[pixelId] = true;
+      window.fbq("init", String(pixelId));
+      window.fbq("track", "PageView");
+    }
+  }
   function metaTrackLead(pixelId, eventId) {
     if (!pixelId || !eventId) return;
     try {
-      if (!window.fbq) {
-        var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
-        if (!window._fbq) window._fbq = n;
-        n.push = n; n.loaded = true; n.version = "2.0"; n.queue = [];
-        var t = document.createElement("script"); t.async = true;
-        t.src = "https://connect.facebook.net/en_US/fbevents.js";
-        document.head.appendChild(t);
-      }
-      window.fbq("init", String(pixelId));
-      window.fbq("track", "PageView");
+      metaPixel(String(pixelId));
       window.fbq("track", "Lead", {}, { eventID: String(eventId) });
+    } catch (e) { console.error("[meta] pixel failed", e); }
+  }
+  // Browser half of "PriceViewed" (customer reached the Price Rollout slide).
+  // The worker sends the server half and returns the pixel + event_id only on
+  // the first view, so Meta counts each customer once.
+  function metaTrackPriceViewed(pixelId, eventId) {
+    if (!pixelId || !eventId) return;
+    try {
+      metaPixel(String(pixelId));
+      window.fbq("trackCustom", "PriceViewed", { content_name: "Price Rollout" }, { eventID: String(eventId) });
     } catch (e) { console.error("[meta] pixel failed", e); }
   }
 
@@ -764,7 +781,17 @@
     }
     return {
       submissionId: submissionId,
-      priceShown: function () { return action("price_viewed"); },
+      priceShown: function () {
+        return post({
+          action: "price_viewed",
+          fbc: readCookie("_fbc") || undefined,
+          fbp: readCookie("_fbp") || undefined,
+          event_source_url: window.location.href
+        }, "price_viewed").then(function (r) {
+          if (r && r.meta_pixel_id && r.meta_event_id) metaTrackPriceViewed(r.meta_pixel_id, r.meta_event_id);
+          return r;
+        });
+      },
       action: action,
       callMeNow: callMeNow
     };
