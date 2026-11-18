@@ -937,7 +937,109 @@
   }
 
   /* ---------- Customer deck: full-window overlay for this tab's submission ---------- */
+  /* ---------- Device lock for personal deck links (owner, Nov 17 2026) ----------
+     A random id kept on this device. The worker trusts the device the form
+     was filled on + the first device that opens a link; any other device
+     must enter a code texted to the phone on file. */
+  function deckDeviceId() {
+    try {
+      var k = "gm_deck_device", v = localStorage.getItem(k);
+      if (!v || !/^[A-Za-z0-9-]{16,64}$/.test(v)) {
+        v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID()
+          : "d" + Date.now().toString(36) + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+        localStorage.setItem(k, v);
+        if (localStorage.getItem(k) !== v) return "";
+      }
+      return v;
+    } catch (e) { return ""; }
+  }
+  function registerFormDevice(submissionId) {
+    var rid = pendingRequest && pendingRequest.request_id, dev = deckDeviceId();
+    if (!rid || !dev || !submissionId) return;
+    try {
+      fetch(WORKER_BASE + "/api/deck-resume", {
+        method: "POST", headers: { "Content-Type": "application/json" }, keepalive: true,
+        body: JSON.stringify({ register: true, submission_id: submissionId, request_id: rid, device_id: dev })
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  /* Code screen. post(extra) -> Promise<{ ok, status, body }> re-sends the
+     link request with { unlock, otp_code, channel }. Resolves with the
+     successful body once this device is unlocked. */
+  function deviceUnlock(show, first, post) {
+    var e = function (t) { return String(t || "").replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); };
+    return new Promise(function (resolve) {
+      var last4 = (first && first.phone_last4) || "";
+      if (first && first.error === "DEVICE_NO_PHONE") {
+        show("Please open this on your own device", '<p style="margin:0;font-size:15px;line-height:1.5">For your privacy, this estimate only opens on the device it was sent to. Give GutterMaxx a call and we&rsquo;ll help you right away.</p>');
+        return;
+      }
+      var busy = false;
+      function msg(t, bad) { var m = $("#devMsg"); if (m) { m.textContent = t || ""; m.style.color = bad ? "#c1442d" : "#5f6a63"; } }
+      function askScreen() {
+        show("Confirm it&rsquo;s you",
+          '<p style="margin:0 0 8px;font-size:16px;line-height:1.5">For your privacy, your <b>GutterMaxx <span style="white-space:nowrap">5&#8209;Minute</span> Estimate</b> only opens on your own device. We&rsquo;ll text a 6-digit code to the phone number ending in <b>' + e(last4) + '</b>.</p>' +
+          '<p style="margin:14px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="devSend" style="max-width:320px">Text Me My Code</button></p>' +
+          '<p style="margin:12px 0 0;font-size:14px"><a href="#" id="devCall" style="color:#0d2f21;font-weight:700;text-decoration:underline">Call me with the code instead</a></p>' +
+          '<p id="devMsg" role="alert" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
+        $("#devSend").addEventListener("click", function () { send("sms", $("#devSend")); });
+        $("#devCall").addEventListener("click", function (ev) { ev.preventDefault(); send("call", $("#devSend")); });
+      }
+      function codeScreen(channel) {
+        show("Enter your code",
+          '<p style="margin:0 0 8px;font-size:16px;line-height:1.5">' + (channel === "call" ? "We&rsquo;re calling" : "We just texted") + ' the phone number ending in <b>' + e(last4) + '</b>. Enter the 6-digit code to open your estimate.</p>' +
+          '<input type="text" id="devCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="6-digit code" aria-label="6-digit code" style="width:100%;max-width:220px;height:50px;border:1px solid #d5ddd8;border-radius:12px;padding:0 14px;font-size:22px;letter-spacing:.2em;text-align:center;margin-top:8px">' +
+          '<p style="margin:12px 0 0"><button type="button" class="cta-btn cta-btn-primary" id="devVerify" style="max-width:320px">Open My Estimate</button></p>' +
+          '<p style="margin:12px 0 0;font-size:14px"><a href="#" id="devResend" style="color:#0d2f21;font-weight:700;text-decoration:underline">Send a new code</a></p>' +
+          '<p id="devMsg" role="alert" style="margin:10px 0 0;font-size:13px;font-weight:700;color:#5f6a63"></p>');
+        var input = $("#devCode"), btn = $("#devVerify");
+        try { input.focus(); } catch (x) {}
+        input.addEventListener("input", function () {
+          input.value = String(input.value).replace(/\D/g, "").slice(0, 10);
+          if (input.value.length === 6 && !busy) verify(input.value, btn);
+        });
+        btn.addEventListener("click", function () {
+          var c = String(input.value).replace(/\D/g, "");
+          if (c.length < 4) { msg("Enter the 6-digit code we sent you.", true); return; }
+          verify(c, btn);
+        });
+        $("#devResend").addEventListener("click", function (ev) { ev.preventDefault(); askScreen(); });
+      }
+      function problem(b) {
+        if (b.too_many) return "Too many tries. Please try again later, or give GutterMaxx a call.";
+        if (b.send_failed) return "We couldn\u2019t send the code. Please try again in a minute.";
+        if (b.check_failed) return "We couldn\u2019t check the code. Please try again.";
+        if (b.needs_new_code) return "That code expired. Tap \u201cSend a new code.\u201d";
+        if (b.wrong) return "That code didn\u2019t match. Check your texts and try again.";
+        if (b.error === "DEVICE_STORAGE_BLOCKED") return "Your browser is blocking this page from remembering your device (private mode?). Open the link in your regular browser.";
+        return "That didn\u2019t go through. Please try again.";
+      }
+      function send(channel, btn) {
+        if (busy) return; busy = true;
+        setBtnLoading(btn, true, "Sending\u2026");
+        post({ unlock: "send", channel: channel }).then(function (r) {
+          busy = false; setBtnLoading(btn, false);
+          var b = r.body || {};
+          if (b.sent) codeScreen(b.channel || channel); else msg(problem(b), true);
+        }).catch(function () { busy = false; setBtnLoading(btn, false); msg("That didn\u2019t go through. Check your connection and try again.", true); });
+      }
+      function verify(code, btn) {
+        if (busy) return; busy = true;
+        setBtnLoading(btn, true, "Checking\u2026");
+        post({ unlock: "verify", otp_code: code }).then(function (r) {
+          busy = false; setBtnLoading(btn, false);
+          var b = r.body || {};
+          if (r.ok && b.ok) { resolve(b); return; }
+          msg(problem(b), true);
+          var i = $("#devCode"); if (i) { i.value = ""; try { i.focus(); } catch (x) {} }
+        }).catch(function () { busy = false; setBtnLoading(btn, false); msg("That didn\u2019t go through. Check your connection and try again.", true); });
+      }
+      askScreen();
+    });
+  }
+
   function openDeck(submissionId) {
+    registerFormDevice(submissionId);
     var existing = $("#deckOverlay");
     if (existing) existing.parentNode.removeChild(existing);
     var addr = (pendingRequest && pendingRequest.formatted_address) || (leadData && leadData.address) || "";
@@ -2077,13 +2179,23 @@
     if (!keepPanel) show("Starting your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
       '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we read your address.</p>');
 
-    return Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
-      return fetch(WORKER_BASE + "/api/fb-start", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(Object.assign({ code: code, device_fingerprint: r[0], turnstile_token: r[1] }, TEST_KEY ? { test_key: TEST_KEY } : {}))
+    function postStart(extra) {
+      return Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (r) {
+        return fetch(WORKER_BASE + "/api/fb-start", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.assign({ code: code, device_fingerprint: r[0], turnstile_token: r[1], device_id: deckDeviceId() }, TEST_KEY ? { test_key: TEST_KEY } : {}, extra || {}))
+        });
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
       });
-    }).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
+    }
+    return postStart().then(function (r) {
+      var b = r.body || {};
+      // Device lock (already-quoted link on a new device) -> text code first.
+      if (b.error === "DEVICE_CODE_REQUIRED" || b.error === "DEVICE_NO_PHONE") {
+        return deviceUnlock(show, b, postStart).then(function (ok) { return { ok: true, status: 200, body: ok }; });
+      }
+      return r;
     }).then(function (r) {
       var b = r.body || {};
       if (!r.ok || !b.ok) {
@@ -2176,13 +2288,23 @@
     show("Pulling up your GutterMaxx <span style=\"white-space:nowrap\">5&#8209;Minute</span> Estimate\u2026",
       '<p style="margin:0;font-size:15px;color:#5f6a63">One moment while we load your home.</p>');
 
-    getTurnstileToken().then(function (token) {
-      return fetch(WORKER_BASE + "/api/deck-resume", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code: rCode, turnstile_token: token })
+    function postResume(extra) {
+      return getTurnstileToken().then(function (token) {
+        return fetch(WORKER_BASE + "/api/deck-resume", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(Object.assign({ code: rCode, turnstile_token: token, device_id: deckDeviceId() }, extra || {}))
+        });
+      }).then(function (res) {
+        return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
       });
-    }).then(function (res) {
-      return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, body: b }; });
+    }
+    postResume().then(function (r) {
+      var b = r.body || {};
+      // Device lock: not a trusted device -> text code first.
+      if (b.error === "DEVICE_CODE_REQUIRED" || b.error === "DEVICE_NO_PHONE") {
+        return deviceUnlock(show, b, postResume).then(function (ok) { return { ok: true, body: ok }; });
+      }
+      return r;
     }).then(function (r) {
       var b = r.body || {};
       if (!r.ok || !b.ok || !b.submission_id) {
