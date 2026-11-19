@@ -16,7 +16,6 @@
   var QUOTE_STATUS_URL   = WORKER_BASE + "/api/quote-status";
   var MANUAL_REVIEW_URL  = WORKER_BASE + "/api/manual-review";
   var QUOTE_VIEWED_URL   = WORKER_BASE + "/api/quote-viewed";
-  var FUNNEL_EVENT_URL   = WORKER_BASE + "/api/funnel-event";
 
   // Pre-launch / QA only: ?testkey=... on the page URL is remembered for
   // this tab and sent to address-lookup + quote-start, where the worker
@@ -65,7 +64,7 @@
     } catch (e) { console.error("[gads] conversion failed", e); }
   }
   var metaInited = {};
-  function metaPixel(pixelId, pageViewEventId) {
+  function metaPixel(pixelId) {
     if (!window.fbq) {
       var n = window.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments); };
       if (!window._fbq) window._fbq = n;
@@ -77,82 +76,9 @@
     if (!metaInited[pixelId]) {
       metaInited[pixelId] = true;
       window.fbq("init", String(pixelId));
-      // Same event id as the worker's server-side PageView, so Meta counts it once.
-      if (pageViewEventId) window.fbq("track", "PageView", {}, { eventID: String(pageViewEventId) });
-      else window.fbq("track", "PageView");
+      window.fbq("track", "PageView");
     }
   }
-
-  /* ---------- First-party funnel tracking (owner, Nov 17 2026) ----------
-     One tiny beacon per step so we can see where visitors drop off:
-     page_view -> form_start -> form_submit -> risk_pass | code_shown -> verified -> estimate.
-     Sent as text/plain so the browser never needs a CORS preflight.
-     Never blocks or breaks the page. */
-  var FUNNEL = (function () {
-    var q = new URLSearchParams(window.location.search);
-    var sid = "";
-    try { sid = sessionStorage.getItem("gm_sid") || ""; } catch (e) {}
-    if (!sid) {
-      sid = (Date.now().toString(36) + Math.random().toString(36).slice(2, 12)).replace(/[^a-z0-9]/g, "");
-      try { sessionStorage.setItem("gm_sid", sid); } catch (e) {}
-    }
-    var ua = navigator.userAgent || "";
-    var inApp = /Instagram/i.test(ua) ? "instagram" : (/FBAN|FBAV|FB_IAB|FBIOS/i.test(ua) ? "facebook" : (/musical_ly|BytedanceWebview|TikTok/i.test(ua) ? "tiktok" : null));
-    return {
-      sid: sid,
-      utm: { source: q.get("utm_source") || "", campaign: q.get("utm_campaign") || "", content: q.get("utm_content") || "" },
-      click_id: q.get("fbclid") ? "fbclid" : (q.get("ttclid") ? "ttclid" : (q.get("gclid") ? "gclid" : null)),
-      device: /Mobi|Android|iPhone|iPad/i.test(ua) ? "mobile" : "desktop",
-      in_app: inApp,
-      sent: {}
-    };
-  })();
-  function funnelBody(event, extra) {
-    return JSON.stringify(Object.assign({
-      event: event, sid: FUNNEL.sid, utm: FUNNEL.utm, click_id: FUNNEL.click_id,
-      device: FUNNEL.device, in_app: FUNNEL.in_app,
-      ms: Math.round((window.performance && performance.now()) || 0)
-    }, extra || {}));
-  }
-  function trackStep(event, extra) {
-    try {
-      if (event !== "estimate" && FUNNEL.sent[event]) return;   // once per tab
-      FUNNEL.sent[event] = true;
-      var body = funnelBody(event, extra);
-      if (navigator.sendBeacon && navigator.sendBeacon(FUNNEL_EVENT_URL, new Blob([body], { type: "text/plain" }))) return;
-      fetch(FUNNEL_EVENT_URL, { method: "POST", headers: { "Content-Type": "text/plain" }, body: body, keepalive: true }).catch(function () {});
-    } catch (e) {}
-  }
-  // Page view: our own count + Meta PageView (server + browser, deduped).
-  (function trackPageView() {
-    try {
-      FUNNEL.sent.page_view = true;
-      fetch(FUNNEL_EVENT_URL, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain" },
-        body: funnelBody("page_view", { url: window.location.href.slice(0, 1000), fbc: readCookie("_fbc") || undefined, fbp: readCookie("_fbp") || undefined }),
-        keepalive: true
-      }).then(function (res) { return res.status === 200 ? res.json() : null; })
-        .then(function (b) { if (b && b.meta_pixel_id) metaPixel(String(b.meta_pixel_id), b.meta_event_id); })
-        .catch(function () {});
-    } catch (e) {}
-  })();
-
-  /* ---------- Load the bot check + device id only when needed ----------
-     Turnstile and FingerprintJS used to load with the page and slow it down.
-     Now they load the moment someone starts the form (or 3s after the page
-     finishes loading), well before GET MY ESTIMATE is tapped. */
-  var securityLoaded = false;
-  function loadSecurityScripts() {
-    if (securityLoaded) return;
-    securityLoaded = true;
-    ["https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit",
-     "https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@3/dist/fp.min.js"].forEach(function (src) {
-      var el = document.createElement("script"); el.src = src; el.async = true; document.head.appendChild(el);
-    });
-  }
-  if (document.readyState === "complete") setTimeout(loadSecurityScripts, 3000);
-  else window.addEventListener("load", function () { setTimeout(loadSecurityScripts, 3000); });
   function metaTrackLead(pixelId, eventId) {
     if (!pixelId || !eventId) return;
     try {
@@ -635,15 +561,6 @@
   }
 
   var fields = ["first_name", "last_name", "phone", "email", "address", "zip"].map(function (id) { return $("#" + id); });
-  var formStartedAt = 0;
-  function noteFormStart() {
-    if (!formStartedAt) formStartedAt = Date.now();
-    loadSecurityScripts();
-    trackStep("form_start");
-  }
-  form.addEventListener("focusin", noteFormStart);
-  form.addEventListener("touchstart", noteFormStart, { passive: true });
-  function honeypotValue() { var h = $("#website"); return h ? h.value : ""; }
   fields.forEach(function (f) {
     f.addEventListener("blur", function () { showError(f, !isValid(f)); });
     f.addEventListener("input", function () { if (f.classList.contains("invalid") && isValid(f)) { showError(f, false); maybeClearValidationBanner(); } });
@@ -1162,7 +1079,6 @@
     NOT_VERIFIED: "We couldn\u2019t confirm your phone number. Tap \u201cResend code\u201d and enter the newest code.",
     TURNSTILE: "We couldn\u2019t confirm you\u2019re not a robot. Refresh the page and try again.",
     OTP_SEND_FAILED: "We couldn\u2019t text a code to that number. Check the number and try again.",
-    INVALID_PHONE: "That phone number doesn\u2019t look right. Please check it and try again.",
     QUOTE_START_FAILED: "We couldn\u2019t start your estimate just now. Please try again in a minute.",
     ADDRESS_LOOKUP_FAILED: "We couldn\u2019t look up that address. Check the street and ZIP and try again.",
     NETWORK: "That didn\u2019t go through. Check your connection and try again."
@@ -1258,7 +1174,6 @@
         });
         activeTracker.start();
         window.GM5ME = createDeckReporter(result.body.submission_id);
-        trackStep("estimate", { request_id: pendingRequest && pendingRequest.request_id, territory: pendingRequest && pendingRequest.territory });
         metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
         googleAdsTrackLead(result.body.submission_id);
         showQuoteTransition();
@@ -1270,7 +1185,6 @@
       // the "Submit for Review" screen (window.GM5MEManualReview).
       if (result.body && result.body.submission_id && result.body.status === "manual_review") {
         window.GM5ME = createDeckReporter(result.body.submission_id);
-        trackStep("estimate", { request_id: pendingRequest && pendingRequest.request_id, territory: pendingRequest && pendingRequest.territory });
         metaTrackLead(result.body.meta_pixel_id, result.body.meta_event_id);
         googleAdsTrackLead(result.body.submission_id);
         showQuoteTransition();
@@ -1488,8 +1402,6 @@
 
     var fullAddress = data.address + ", " + data.zip;
 
-    trackStep("form_submit");
-    loadSecurityScripts();
     Promise.all([getDeviceFingerprint(), getTurnstileToken()]).then(function (results) {
       var fingerprint = results[0];
       var turnstileToken = results[1];
@@ -1497,7 +1409,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.assign(
-          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken, hp: honeypotValue() },
+          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken },
           TEST_KEY ? { test_key: TEST_KEY } : {}
         ))
       });
@@ -1534,7 +1446,7 @@
         return fetch(OTP_SEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip, lead: otpLeadPayload(), hp: honeypotValue(), fill_ms: formStartedAt ? Date.now() - formStartedAt : null })
+          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip, lead: otpLeadPayload() })
         });
       });
     }).then(function (res) {
@@ -1542,22 +1454,11 @@
         return { ok: res.ok, status: res.status, body: body };
       });
     }).then(function (result) {
-      // Code only when flagged (owner, Nov 17 2026): a clean visitor is
-      // already verified by the worker — go straight to the estimate.
-      if (result.ok && result.body.verified && result.body.risk_pass) {
-        trackStep("risk_pass", { request_id: pendingRequest && pendingRequest.request_id });
-        setBtnLoading(btn, true, "Getting your estimate\u2026");
-        return runQuoteStart().then(function () { setBtnLoading(btn, false); });
-      }
-      if (result.status === 422 && result.body && result.body.error === "invalid_phone") {
-        throw new Error("INVALID_PHONE");
-      }
       if (!result.ok || !result.body.sent) {
         if (result.status === 429) noteLimitPhone(result.body);
         throw new Error(result.status === 429 ? "RATE_LIMITED" : (result.status === 403 ? "TURNSTILE" : "OTP_SEND_FAILED"));
       }
       setBtnLoading(btn, false);
-      trackStep("code_shown", { request_id: pendingRequest && pendingRequest.request_id });
       openOtpModal();
     }).catch(function (err) {
       setBtnLoading(btn, false);
@@ -1860,7 +1761,6 @@
         otpCode.focus();
         return;
       }
-      trackStep("verified", { request_id: pendingRequest && pendingRequest.request_id });
       // Verified — hand off to quote-start, which runs the ATTOM gate
       // (Gate 7). Keep the modal in a loading state until we know whether
       // that succeeded or came back ATTOM_NOT_FOUND.
@@ -1888,7 +1788,7 @@
       return fetch(OTP_SEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, lead: otpLeadPayload(), resend: true })
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, lead: otpLeadPayload() })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
@@ -1926,7 +1826,7 @@
       return fetch(OTP_SEND_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, channel: "call", lead: otpLeadPayload(), resend: true })
+        body: JSON.stringify({ request_id: pendingRequest.request_id, phone_e164: toE164(leadData.phone), turnstile_token: turnstileToken, zip: pendingRequest.zip, channel: "call", lead: otpLeadPayload() })
       });
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (body) {
