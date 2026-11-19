@@ -1054,5 +1054,3 @@ body.deck-open #mobileCta{display:none!important}
 .right-col:has(.front-pitch){align-self:start}
 @media (max-width:900px){ .front-pitch{display:none !important} }
 
-/* Bot trap (owner, Nov 17 2026): off-screen for people, bots fill it in. */
-.hp-field{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important}

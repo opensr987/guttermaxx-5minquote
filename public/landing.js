@@ -643,7 +643,6 @@
   }
   form.addEventListener("focusin", noteFormStart);
   form.addEventListener("touchstart", noteFormStart, { passive: true });
-  function honeypotValue() { var h = $("#website"); return h ? h.value : ""; }
   fields.forEach(function (f) {
     f.addEventListener("blur", function () { showError(f, !isValid(f)); });
     f.addEventListener("input", function () { if (f.classList.contains("invalid") && isValid(f)) { showError(f, false); maybeClearValidationBanner(); } });
@@ -1497,7 +1496,7 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(Object.assign(
-          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken, hp: honeypotValue() },
+          { address: fullAddress, device_fingerprint: fingerprint, turnstile_token: turnstileToken },
           TEST_KEY ? { test_key: TEST_KEY } : {}
         ))
       });
@@ -1534,7 +1533,7 @@
         return fetch(OTP_SEND_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip, lead: otpLeadPayload(), hp: honeypotValue(), fill_ms: formStartedAt ? Date.now() - formStartedAt : null })
+          body: JSON.stringify({ request_id: lookup.request_id, phone_e164: toE164(data.phone), turnstile_token: turnstileToken, zip: lookup.zip || data.zip, lead: otpLeadPayload(), fill_ms: formStartedAt ? Date.now() - formStartedAt : null })
         });
       });
     }).then(function (res) {
