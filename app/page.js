@@ -870,6 +870,11 @@ const BODY_HTML = `
           <!-- Cloudflare Turnstile — invisible bot check, no visitor interaction -->
           <div id="cf-turnstile" aria-hidden="true"></div>
 
+          <!-- Bot trap (owner, Nov 17 2026): hidden from people, bots fill it in. -->
+          <div class="hp-field" aria-hidden="true">
+            <label for="website">Website</label>
+            <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+          </div>
 
           <input type="hidden" name="color_preference" id="colorPreference" value="">
 
