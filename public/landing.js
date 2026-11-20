@@ -1196,6 +1196,10 @@
       email: leadData.email,
       lead_source: LEAD_SOURCE
     };
+    // Deck-first (owner, 2026-11-20): the worker answers as soon as the
+    // estimate record exists, so the deck starts in ~1 s; the research check,
+    // ATTOM, house check and measurement order run while slides 1-2 play.
+    payload.fast_deck = true;
     if (TEST_KEY) payload.test_key = TEST_KEY;
     if (INVITE_CODE) payload.invite_code = INVITE_CODE;
     payload.fbc = readCookie("_fbc") || undefined;
