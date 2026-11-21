@@ -116,7 +116,11 @@
   }
   function trackStep(event, extra) {
     try {
-      if (event !== "estimate" && FUNNEL.sent[event]) return;   // once per tab
+      // form_invalid can repeat (each failed tap), capped at 5 per tab.
+      if (event === "form_invalid") {
+        FUNNEL.invalidCount = (FUNNEL.invalidCount || 0) + 1;
+        if (FUNNEL.invalidCount > 5) return;
+      } else if (event !== "estimate" && FUNNEL.sent[event]) return;   // once per tab
       FUNNEL.sent[event] = true;
       var body = funnelBody(event, extra);
       if (navigator.sendBeacon && navigator.sendBeacon(FUNNEL_EVENT_URL, new Blob([body], { type: "text/plain" }))) return;
@@ -670,12 +674,15 @@
   // Validates every field + consent. Returns a plain data object on success,
   // or null (and focuses/highlights the first problem) on failure.
   function validateLeftForm() {
-    if ($("#company").value) return null; // spam trap — fail silently, no error shown
-
+    // The hidden "Company" spam trap was removed (owner, Nov 20 2026): phone
+    // autofill could fill it and the form then silently did nothing. Bots are
+    // still stopped by the Cloudflare Turnstile check on the server.
     var firstBad = null;
+    var badFields = [];
     fields.forEach(function (f) {
       var ok = isValid(f);
       showError(f, !ok);
+      if (!ok) badFields.push(f.id + (f.value.trim() ? ":bad" : ":empty"));
       if (!ok && !firstBad) firstBad = f;
     });
 
@@ -688,8 +695,13 @@
     homeownerCertifyWrap.classList.toggle("invalid", !homeownerOk);
     $('.error[data-for="homeownerCertify"]').classList.toggle("show", !homeownerOk);
     if (!homeownerOk && !firstBad) firstBad = homeownerCertify;
+    if (!consentOk) badFields.push("consent");
+    if (!homeownerOk) badFields.push("homeownerCertify");
 
     if (firstBad) {
+      // Record which field(s) stopped this tap (field names only, never
+      // what was typed) so we can see where visitors get stuck.
+      trackStep("form_invalid", { detail: { fields: badFields } });
       // Guaranteed scroll-to-error: don't rely on the browser's own
       // focus()-triggered scroll (inconsistent across browsers, and a
       // no-op if the field is technically "in" a tall viewport but not
