@@ -861,12 +861,6 @@ const BODY_HTML = `
             <p class="error" data-for="zip">Enter your 5-digit ZIP code.</p>
           </div>
 
-          <!-- spam trap -->
-          <div class="hp" aria-hidden="true">
-            <label for="company">Company</label>
-            <input type="text" id="company" name="company" tabindex="-1" autocomplete="off">
-          </div>
-
           <!-- Cloudflare Turnstile — invisible bot check, no visitor interaction -->
           <div id="cf-turnstile" aria-hidden="true"></div>
 
