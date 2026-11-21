@@ -952,9 +952,20 @@
   /* Original deck disabled / replaced by the rep's in-home deck (owner,
      Nov 21 2026): every link to it opens the rep deck instead. */
   function toRepDeck(url) {
+    // No rep deck yet (disabled at the appointment time): holding message.
+    if (url === null || url === undefined || url === "") { showRepDeckHold(); return true; }
     if (!/^https:\/\/go\.guttermaxx\.com\/deck-rep\/rep\.html\?rep=[A-Za-z0-9]{12}$/.test(String(url || ""))) return false;
     window.location.replace(url);
     return true;
+  }
+
+  function showRepDeckHold() {
+    var d = document.createElement("div");
+    d.setAttribute("role", "dialog");
+    d.style.cssText = "position:fixed;inset:0;z-index:2147483647;background:#0b1f33;color:#fff;display:flex;align-items:center;justify-content:center;padding:24px;font-family:inherit;text-align:center";
+    d.innerHTML = '<div style="max-width:440px"><h1 style="font-size:24px;margin:0 0 12px">Your GutterMaxx\u2122 estimate is with your GutterMaxx Pro</h1>'
+      + '<p style="font-size:16px;line-height:1.5;margin:0;opacity:.9">Your Pro is preparing your personalized GutterMaxx\u2122 Deck. Once it\u2019s ready, this link will open it.</p></div>';
+    document.body.appendChild(d);
   }
 
   /* ---------- Customer deck: full-window overlay for this tab's submission ---------- */
