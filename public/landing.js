@@ -912,6 +912,8 @@
             return;
           }
           lastStatus = body;
+          // Original deck replaced by the rep's in-home deck (owner, Nov 21 2026).
+          if (body.replaced && toRepDeck(body.rep_url)) { stop(); return; }
           if (typeof onUpdate === "function") onUpdate(body);
 
           var bothTerminal = body.canopy_status !== "pending" && body.measurement_status !== "pending";
@@ -945,6 +947,14 @@
       stop: stop,
       getLastStatus: function () { return lastStatus; },
     };
+  }
+
+  /* Original deck disabled / replaced by the rep's in-home deck (owner,
+     Nov 21 2026): every link to it opens the rep deck instead. */
+  function toRepDeck(url) {
+    if (!/^https:\/\/go\.guttermaxx\.com\/deck-rep\/rep\.html\?rep=[A-Za-z0-9]{12}$/.test(String(url || ""))) return false;
+    window.location.replace(url);
+    return true;
   }
 
   /* ---------- Customer deck: full-window overlay for this tab's submission ---------- */
@@ -2213,6 +2223,7 @@
       return r;
     }).then(function (r) {
       var b = r.body || {};
+      if (b.error === "REPLACED" && toRepDeck(b.rep_url)) return;
       if (!r.ok || !b.ok) {
         if (b.error === "RATE_LIMITED") {
           show("You&rsquo;ve reached the limit of instant estimates", '<p style="margin:0;font-size:15px;line-height:1.5">This phone number or device has already had its 2 free instant estimates. Give us a call and we&rsquo;ll price it for you.</p>' + callLine(b.phone_digits, b.phone_display));
@@ -2285,8 +2296,10 @@
               attempt, no limit used, no new imagery.
   ===================================================== */
   (function reminderLink() {
-    var rCode = "";
-    try { rCode = new URLSearchParams(window.location.search).get("r") || ""; } catch (e) {}
+    var rCode = "", cbPass = "";
+    try { var rq = new URLSearchParams(window.location.search); rCode = rq.get("r") || ""; cbPass = rq.get("cb") || ""; } catch (e) {}
+    // ?cb= : opened from the Connector's Contract Builder (signed by the worker) -> no device code.
+    if (!/^\d{9,11}\.[A-Za-z0-9_-]{32}$/.test(cbPass)) cbPass = "";
     if (!/^(?:[A-Za-z0-9]{6}|[A-Za-z0-9]{12})$/.test(rCode)) return; // journey (6) or legacy (12)
     var card = form && (form.closest(".form-card") || form.parentNode);
     if (!card) return;
@@ -2307,7 +2320,7 @@
       return getTurnstileToken().then(function (token) {
         return fetch(WORKER_BASE + "/api/deck-resume", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(Object.assign({ code: rCode, turnstile_token: token, device_id: deckDeviceId() }, extra || {}))
+          body: JSON.stringify(Object.assign({ code: rCode, turnstile_token: token, device_id: deckDeviceId() }, cbPass ? { cb: cbPass } : {}, extra || {}))
         });
       }).then(function (res) {
         return res.json().catch(function () { return {}; }).then(function (b) { return { ok: res.ok, status: res.status, body: b }; });
@@ -2322,6 +2335,7 @@
       return r;
     }).then(function (r) {
       var b = r.body || {};
+      if (b.error === "REPLACED" && toRepDeck(b.rep_url)) return;
       if (!r.ok || !b.ok || !b.submission_id) {
         if (b.error === "LINK_EXPIRED" || b.error === "LINK_NOT_FOUND") {
           show("This link has expired", '<p style="margin:0;font-size:15px;line-height:1.5">No problem. Fill out the form below to start a new estimate.</p>');
