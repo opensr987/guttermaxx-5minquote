@@ -32,6 +32,11 @@ const nextConfig = {
         permanent: false,
       },
       {
+        source: "/z/:code([A-Za-z0-9]{6})",
+        destination: "https://guttermaxx-5minquote-worker.vercel.app/api/drip?c=:code&a=zoom",
+        permanent: false,
+      },
+      {
         source: "/p/:code([A-Za-z0-9]{6})",
         destination: "https://guttermaxx-5minquote-worker.vercel.app/api/drip?c=:code&a=prequalify",
         permanent: false,
